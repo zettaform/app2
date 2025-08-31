@@ -1,0 +1,53 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Admin Keys DynamoDB Table for User Creation API'
+
+Resources:
+  AdminKeysTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${AWS::StackName}-admin-keys'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: admin_key_id
+          AttributeType: S
+        - AttributeName: admin_key
+          AttributeType: S
+        - AttributeName: key_status
+          AttributeType: S
+      KeySchema:
+        - AttributeName: admin_key_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: AdminKeyIndex
+          KeySchema:
+            - AttributeName: admin_key
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+        - IndexName: StatusIndex
+          KeySchema:
+            - AttributeName: key_status
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      Tags:
+        - Key: Purpose
+          Value: Admin Keys Management
+        - Key: Environment
+          Value: Development
+
+Outputs:
+  AdminKeysTableName:
+    Description: Name of the Admin Keys DynamoDB table
+    Value: !Ref AdminKeysTable
+    Export:
+      Name: !Sub '${AWS::StackName}-AdminKeysTableName'
+  
+  AdminKeysTableArn:
+    Description: ARN of the Admin Keys DynamoDB table
+    Value: !GetAtt AdminKeysTable.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-AdminKeysTableArn'

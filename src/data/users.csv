@@ -1,0 +1,11 @@
+id,username,email,password,full_name,avatar,onboarding_completed,role
+1,john_doe,john@example.com,password123,John Doe,avatar1.png,true,user
+2,jane_smith,jane@example.com,password123,Jane Smith,avatar2.png,true,user
+3,admin_user,admin@example.com,admin123,Admin User,avatar3.png,true,admin
+4,bob_wilson,bob@example.com,password123,Bob Wilson,avatar4.png,false,user
+5,alice_brown,alice@example.com,password123,Alice Brown,avatar5.png,true,user
+6,charlie_davis,charlie@example.com,password123,Charlie Davis,avatar6.png,true,user
+7,diana_miller,diana@example.com,password123,Diana Miller,avatar7.png,false,user
+8,eva_garcia,eva@example.com,password123,Eva Garcia,avatar8.png,true,user
+9,frank_johnson,frank@example.com,password123,Frank Johnson,avatar9.png,true,user
+10,grace_lee,grace@example.com,password123,Grace Lee,avatar10.png,true,user

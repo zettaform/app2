@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB table for storing external user creation logs'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: 'dev'
+    Description: 'Environment name (dev, staging, prod)'
+    AllowedValues: ['dev', 'staging', 'prod']
+
+Resources:
+  ExternalUserLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${Environment}-external-user-creation-logs'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: log_id
+          AttributeType: S
+        - AttributeName: admin_key_id
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+        - AttributeName: admin_key
+          AttributeType: S
+      
+      KeySchema:
+        - AttributeName: log_id
+          KeyType: HASH
+      
+      GlobalSecondaryIndexes:
+        - IndexName: AdminKeyIndex
+          KeySchema:
+            - AttributeName: admin_key
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: AdminKeyIdIndex
+          KeySchema:
+            - AttributeName: admin_key_id
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: CreatedAtIndex
+          KeySchema:
+            - AttributeName: created_at
+              KeyType: HASH
+            - AttributeName: log_id
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+      
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Purpose
+          Value: 'External User Creation Logs'
+        - Key: ManagedBy
+          Value: 'CloudFormation'
+
+Outputs:
+  ExternalUserLogsTableName:
+    Description: 'Name of the external user creation logs table'
+    Value: !Ref ExternalUserLogsTable
+    Export:
+      Name: !Sub '${Environment}-ExternalUserLogsTableName'
+  
+  ExternalUserLogsTableArn:
+    Description: 'ARN of the external user creation logs table'
+    Value: !GetAtt ExternalUserLogsTable.Arn
+    Export:
+      Name: !Sub '${Environment}-ExternalUserLogsTableArn'

@@ -1,0 +1,51 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 Bucket for Dragon Ball Z Avatars'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    Description: Environment name
+
+Resources:
+  AvatarsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${Environment}-dbz-avatars-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET]
+            AllowedOrigins: ['*']
+            MaxAge: 3000
+
+  AvatarsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AvatarsBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${AvatarsBucket}/*'
+
+Outputs:
+  AvatarsBucketName:
+    Description: Name of the S3 bucket for avatars
+    Value: !Ref AvatarsBucket
+    Export:
+      Name: !Sub '${Environment}-AvatarsBucketName'
+  
+  AvatarsBucketUrl:
+    Description: URL of the S3 bucket for avatars
+    Value: !Sub 'https://${AvatarsBucket}.s3.amazonaws.com/'
+    Export:
+      Name: !Sub '${Environment}-AvatarsBucketUrl'

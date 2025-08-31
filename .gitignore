@@ -1,0 +1,83 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production
+/build
+/dist
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+env.production.example
+env.development.example
+
+# AWS credentials (never commit)
+.aws/
+aws_env/
+
+# Deployment files
+deployment/
+deployment-*/
+*.pem
+*.key
+*.pem
+*.ppk
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+logs/
+app.log
+app.pid
+
+# Misc
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+# Python backend
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+backend/.Python
+backend/env/
+backend/pip-log.txt
+backend/pip-delete-this-directory.txt
+
+# Database files
+backend/data/*.csv
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Temporary folders
+tmp/
+temp/

@@ -1,0 +1,73 @@
+[
+  {
+    "date": "2025-08-18",
+    "title": "v5.1.0 – Onboarding enforcement, admin user creation, avatars, modular FastAPI backend",
+    "author": { "name": "System", "avatar": "user07" },
+    "category": "Product",
+    "body": [
+      "Enforced onboarding flow across protected routes with step tracking and redirects.",
+      "Standardized routes to /onboarding/{step} with /onboarding/complete.",
+      "AuthContext now manages onboarding state with updateOnboardingStep and completeOnboarding, persisted per user.",
+      "ProtectedRoute enforces onboarding and allows completion page view.",
+      "Admin: Add User modal on Customers page for internal user creation.",
+      "Avatars: License-safe set generated and integrated with avatar picker.",
+      "Backend (FastAPI): Modular structure, CORS, JWT auth, signup/login endpoints.",
+      "Account page: Change password flow (UI + backend).",
+      "Frontend API improvements: headers, token handling, error handling.",
+      "Fixes: bcrypt pin, CSV header for empty users file, modal outside-click issue."
+    ]
+  },
+  {
+    "date": "2021-07-08",
+    "title": "Released version 2.0",
+    "author": { "name": "Simona Lürwer", "avatar": "user07" },
+    "category": "Product",
+    "body": [
+      "Major template release with performance and UX improvements.",
+      "Updated charts, polished layouts, and better accessibility."
+    ]
+  },
+  {
+    "date": "2021-07-06",
+    "title": "Feature Name is now public 🎉",
+    "author": { "name": "Danielle Cohen", "avatar": "user02" },
+    "category": "Announcement",
+    "body": [
+      "Rolled out new feature to all users.",
+      "Includes onboarding tips and docs links."
+    ]
+  },
+  {
+    "date": "2021-07-04",
+    "title": "Bugs fixed, issues, and more",
+    "author": { "name": "Patrick Kumar", "avatar": "user01" },
+    "category": "Bug Fix",
+    "body": [
+      "Resolved several UI glitches and improved error states.",
+      "Refined responsive behavior across breakpoints."
+    ]
+  },
+  {
+    "date": "2021-07-02",
+    "title": "Thanks, everyone 🙌",
+    "author": { "name": "Danielle Cohen", "avatar": "user02" },
+    "category": "Exciting News",
+    "body": [
+      "Community feedback has been fantastic—thank you for the support!"
+    ]
+  },
+  {
+    "date": "2023-05-31",
+    "title": "v5.0.0 – Dark mode support",
+    "author": { "name": "Template", "avatar": "user07" },
+    "category": "Announcement",
+    "body": ["Dark mode support added across the app."]
+  },
+  {
+    "date": "2023-05-04",
+    "title": "v4.4.0 – Minor improvements",
+    "author": { "name": "Template", "avatar": "/images/user-32-02.jpg" },
+    "category": "Bug Fix",
+    "body": ["Several minor improvements and fixes."]
+  }
+]

@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=fallback');
+
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+
+/* Additional styles */
+@import 'additional-styles/utility-patterns.css';
+@import 'additional-styles/flatpickr.css';
+
+@import 'tailwindcss/utilities';
+
+/* Prevent unwanted scrolling */
+.sidebar-no-scroll {
+  scroll-behavior: auto !important;
+}
+
+.main-content-no-scroll {
+  scroll-behavior: auto !important;
+}
+
+/* Preserve sidebar state */
+.sidebar-preserve-state {
+  scroll-behavior: auto !important;
+  overflow-anchor: none;
+}
+
+/* Smooth transitions for sidebar */
+.sidebar-smooth {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Prevent page jump on route change */
+.route-change-no-scroll {
+  scroll-behavior: auto !important;
+}
+
+/* Prevent body scroll on sidebar navigation */
+body.sidebar-navigation {
+  scroll-behavior: auto !important;
+  overflow-anchor: none;
+}
+
+/* Preserve scroll position for sidebar items */
+.sidebar-nav-item {
+  scroll-behavior: auto !important;
+}
+
+/* Prevent main content from jumping */
+.main-content-stable {
+  scroll-behavior: auto !important;
+  overflow-anchor: none;
+}
+
+/* Smooth sidebar transitions without scroll interference */
+.sidebar-transition {
+  transition: width 0.2s ease-in-out, transform 0.2s ease-in-out;
+  scroll-behavior: auto !important;
+}
