@@ -149,7 +149,7 @@ function ExternalUserLogs() {
   const hasAdminKeyId = searchParams.get("admin_key_id") || searchParams.get("admin_key");
   if ((!user || user.role !== "admin") && !hasAdminKeyId) {
     return <Navigate to="/" replace />;
-  }
+
   }
     return (
       <div className="flex h-[100dvh] overflow-hidden">
