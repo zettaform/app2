@@ -692,7 +692,6 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify(result));
         return;
       }
-      }
       
       // Generic handler for other /api/* routes
       res.writeHead(200);
