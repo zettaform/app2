@@ -429,6 +429,73 @@ async function getAllAdminKeys() {
   }
 }
 
+// Get all external user creation logs function
+async function getAllExternalLogs(filters = {}) {
+  try {
+    const scanParams = {
+      TableName: TABLES.externalLogs,
+      Limit: filters.limit || 100
+    };
+    
+    // Add filters if provided
+    if (filters.admin_key) {
+      scanParams.FilterExpression = "admin_key = :admin_key";
+      scanParams.ExpressionAttributeValues = {
+        ":admin_key": { S: filters.admin_key }
+      };
+    }
+    
+    if (filters.admin_key_id) {
+      if (scanParams.FilterExpression) {
+        scanParams.FilterExpression += " AND admin_key_id = :admin_key_id";
+      } else {
+        scanParams.FilterExpression = "admin_key_id = :admin_key_id";
+      }
+      scanParams.ExpressionAttributeValues = {
+        ...scanParams.ExpressionAttributeValues,
+        ":admin_key_id": { S: filters.admin_key_id }
+      };
+    }
+    
+    if (filters.success !== undefined && filters.success !== "") {
+      if (scanParams.FilterExpression) {
+        scanParams.FilterExpression += " AND success = :success";
+      } else {
+        scanParams.FilterExpression = "success = :success";
+      }
+      scanParams.ExpressionAttributeValues = {
+        ...scanParams.ExpressionAttributeValues,
+        ":success": { BOOL: filters.success === "true" || filters.success === true }
+      };
+    }
+    
+    const result = await dynamoClient.send(new ScanCommand(scanParams));
+    
+    if (!result.Items) {
+      return { 
+        success: true, 
+        logs: [], 
+        hasMore: false,
+        count: 0
+      };
+    }
+    
+    const logs = result.Items.map(item => unmarshall(item));
+    
+    return { 
+      success: true, 
+      logs,
+      hasMore: !!result.LastEvaluatedKey,
+      lastEvaluatedKey: result.LastEvaluatedKey,
+      count: result.Count || logs.length
+    };
+    
+  } catch (error) {
+    console.error("Get all external logs error:", error);
+    return { success: false, error: "Failed to fetch external logs" };
+  }
+}
+
 // Parse request body
 function parseRequestBody(req) {
   return new Promise((resolve, reject) => {
