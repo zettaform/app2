@@ -677,6 +677,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(result.success ? 200 : 500);
         res.end(JSON.stringify(result));
         return;
+      }
       // Admin logs endpoints
       if (url.startsWith("/api/admin/logs") && method === "GET") {
         const query = parseQuery(url);
