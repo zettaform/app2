@@ -144,6 +144,11 @@ function ExternalUserLogs() {
   };
 
   if (loading && logs.length === 0) {
+
+  // Check if user is admin
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
     return (
       <div className="flex h-[100dvh] overflow-hidden">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
