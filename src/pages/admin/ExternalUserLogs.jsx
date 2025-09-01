@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Navigate } from 'react-router-dom';
 
 import Sidebar from '../../partials/Sidebar';
 import Header from '../../partials/Header';
+import { useAuth } from '../../contexts/AuthContext';
 import { API_CONFIG, buildApiUrl, ENDPOINTS } from '../../config/api-config';
 
 function ExternalUserLogs() {
@@ -11,6 +12,7 @@ function ExternalUserLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { user } = useAuth();
   const [filters, setFilters] = useState({
     admin_key: searchParams.get('admin_key') || '',
     admin_key_id: searchParams.get('admin_key_id') || '',
@@ -28,7 +30,7 @@ function ExternalUserLogs() {
 
   useEffect(() => {
     fetchLogs();
-  }, [filters]);
+  }, [searchParams]);
 
   const fetchLogs = async (lastKey = null, resetPagination = false) => {
     try {
@@ -143,14 +145,13 @@ function ExternalUserLogs() {
     return success ? '✅' : '❌';
   };
 
-  if (loading && logs.length === 0) {
-
   // Check if user is admin OR if admin_key_id is provided in URL (for direct access)
   const hasAdminKeyId = searchParams.get("admin_key_id") || searchParams.get("admin_key");
   if ((!user || user.role !== "admin") && !hasAdminKeyId) {
     return <Navigate to="/" replace />;
-
   }
+
+  if (loading && logs.length === 0) {
     return (
       <div className="flex h-[100dvh] overflow-hidden">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />

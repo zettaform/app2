@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../../partials/Sidebar';
 import Header from '../../partials/Header';
 import { useAuth } from '../../contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { API_CONFIG, buildApiUrl, ENDPOINTS } from '../../config/api-config';
 
 function AdminKeys() {
@@ -15,6 +15,7 @@ function AdminKeys() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState('');
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   // Form state for creating/editing keys
   const [formData, setFormData] = useState({
@@ -351,7 +352,7 @@ function AdminKeys() {
                                 Edit
                               </button>
                               <button
-                                onClick={() => window.open(`/admin/logs?admin_key_id=${key.admin_key_id}`, '_blank')}
+                                onClick={() => navigate(`/admin/logs?admin_key_id=${key.admin_key_id}`)}
                                 className="btn-xs bg-green-500 hover:bg-green-600 text-white"
                                 title="View logs for this key"
                               >
