@@ -145,9 +145,11 @@ function ExternalUserLogs() {
 
   if (loading && logs.length === 0) {
 
-  // Check if user is admin
-  if (!user || user.role !== "admin") {
+  // Check if user is admin OR if admin_key_id is provided in URL (for direct access)
+  const hasAdminKeyId = searchParams.get("admin_key_id") || searchParams.get("admin_key");
+  if ((!user || user.role !== "admin") && !hasAdminKeyId) {
     return <Navigate to="/" replace />;
+  }
   }
     return (
       <div className="flex h-[100dvh] overflow-hidden">
@@ -181,7 +183,7 @@ function ExternalUserLogs() {
                     External User Creation Logs
                   </h1>
                   <p className="text-slate-600 dark:text-slate-400 mt-2 text-lg">
-                    Comprehensive audit trail of all external user creation activities
+                    {hasAdminKeyId ? `Audit trail for admin key: ${searchParams.get("admin_key_id") || searchParams.get("admin_key")}` : "Comprehensive audit trail of all external user creation activities"}
                   </p>
                   <div className="flex items-center mt-3 text-sm text-slate-500 dark:text-slate-400">
                     <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
