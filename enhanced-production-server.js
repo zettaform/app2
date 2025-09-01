@@ -416,12 +416,12 @@ async function getAllAdminKeys() {
     const result = await dynamoClient.send(new ScanCommand(scanParams));
     
     if (!result.Items) {
-      return { success: true, adminKeys: [] };
+      return { success: true, admin_keys: [] };
     }
     
     const adminKeys = result.Items.map(item => unmarshall(item));
     
-    return { success: true, adminKeys };
+    return { success: true, admin_keys: adminKeys };
     
   } catch (error) {
     console.error('Get all admin keys error:', error);
@@ -610,6 +610,21 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(result.success ? 200 : 500);
         res.end(JSON.stringify(result));
         return;
+      // Admin logs endpoints
+      if (url.startsWith("/api/admin/logs") && method === "GET") {
+        const query = parseQuery(url);
+        const filters = {
+          admin_key: query.admin_key,
+          admin_key_id: query.admin_key_id,
+          success: query.success,
+          limit: query.limit ? parseInt(query.limit) : 100
+        };
+        
+        const result = await getAllExternalLogs(filters);
+        res.writeHead(result.success ? 200 : 500);
+        res.end(JSON.stringify(result));
+        return;
+      }
       }
       
       // Generic handler for other /api/* routes
