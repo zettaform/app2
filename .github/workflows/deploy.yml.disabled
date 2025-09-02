@@ -1,0 +1,401 @@
+name: Auto Deploy to EC2
+
+on:
+  push:
+    branches: [ main, app2-main ]
+  pull_request:
+    branches: [ main, app2-main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Setup SSH
+      run: |
+        echo "🔑 Setting up SSH configuration..."
+        
+        # Create SSH directory
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Validate SSH key secret exists
+        if [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "❌ CRITICAL: EC2_SSH_PRIVATE_KEY secret is not set!"
+          echo "Please configure this secret in GitHub repository settings."
+          exit 1
+        fi
+        
+        # Write SSH key with proper formatting
+        echo "📝 Writing SSH private key..."
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        
+        # Fix line endings (convert CRLF to LF if needed)
+        if file ~/.ssh/app2-key-pair.pem | grep -q "CRLF"; then
+          echo "⚠️  Converting Windows line endings to Unix..."
+          dos2unix ~/.ssh/app2-key-pair.pem 2>/dev/null || sed -i 's/\r$//' ~/.ssh/app2-key-pair.pem
+        fi
+        
+        # Set proper permissions
+        chmod 600 ~/.ssh/app2-key-pair.pem
+        
+        # Validate key format
+        echo "🔍 Validating SSH key format..."
+        if ! grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/app2-key-pair.pem; then
+          echo "❌ SSH key is not in proper PEM format!"
+          echo "Key should start with: -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----"
+          echo "First line of key: $(head -1 ~/.ssh/app2-key-pair.pem)"
+          exit 1
+        fi
+        
+        # Test key format with ssh-keygen
+        if ! ssh-keygen -l -f ~/.ssh/app2-key-pair.pem >/dev/null 2>&1; then
+          echo "❌ SSH key format validation failed!"
+          echo "The key may be corrupted or in wrong format."
+          exit 1
+        fi
+        
+        echo "✅ SSH key format is valid"
+        
+        # Add host to known_hosts
+        echo "🌐 Adding EC2 host to known_hosts..."
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+        # Test basic connectivity
+        echo "🔌 Testing SSH connectivity..."
+        if ! ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH test successful'" 2>/dev/null; then
+          echo "❌ SSH connectivity test failed!"
+          echo "Please verify:"
+          echo "  - EC2 instance is running"
+          echo "  - Security group allows SSH (port 22)"
+          echo "  - SSH key pair is correctly associated with EC2 instance"
+          echo "  - EC2_USER and EC2_HOST secrets are correct"
+          exit 1
+        fi
+        
+        echo "✅ SSH setup completed successfully"
+        
+    - name: Deploy to EC2
+      run: |
+        # Create deployment package in a clean directory to avoid file conflicts
+        echo "Creating deployment package..."
+        mkdir -p deployment-temp
+        echo "Copying files to deployment directory..."
+        rsync -av --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='dist' --exclude='build' --exclude='*.log' --exclude='.env*' --exclude='app2-deployment.tar.gz' --exclude='deployment-temp' . deployment-temp/
+        cd deployment-temp
+        
+        echo "Creating tar archive..."
+        tar -czf ../app2-deployment.tar.gz .
+        cd ..
+        
+        echo "Checking deployment package size..."
+        ls -lh app2-deployment.tar.gz
+        
+        # Verify package contents
+        echo "Verifying package contents:"
+        tar -tzf app2-deployment.tar.gz | head -20
+        
+        # Clean up temp directory
+        rm -rf deployment-temp
+        echo "✅ Deployment package created successfully"
+          
+        # Copy to EC2
+        echo "Copying deployment package to EC2..."
+        echo "Local package details:"
+        ls -la app2-deployment.tar.gz
+        if ! scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/; then
+          echo "❌ Failed to copy deployment package to EC2!"
+          exit 1
+        fi
+        echo "✅ Deployment package copied successfully"
+        
+        # Verify the file was copied
+        echo "Verifying file was copied to EC2..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -la /home/ec2-user/app2-deployment.tar.gz && echo 'File verification successful'"
+        
+        # Test extraction on EC2 to ensure it works
+        echo "Testing extraction on EC2..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "cd /home/ec2-user && tar -tzf app2-deployment.tar.gz | head -10"
+        
+        # Deploy on EC2
+        echo "Starting SSH deployment to EC2..."
+        echo "Testing SSH connection..."
+        if ! ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"; then
+          echo "❌ SSH connection failed!"
+          exit 1
+        fi
+        echo "✅ SSH connection successful"
+        
+        echo "Executing SSH deployment script..."
+        echo "SSH command: ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
+        echo "SSH key file exists: $(ls -la ~/.ssh/app2-key-pair.pem)"
+        echo "SSH key permissions: $(stat -c '%a' ~/.ssh/app2-key-pair.pem)"
+        
+        # Execute SSH with error handling and verbose output
+        echo "Testing basic SSH connectivity..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH basic test successful'"
+        
+        echo "Executing SSH deployment with verbose output..."
+        ssh -i ~/.ssh/app2-key-pair.pem -v ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🚀 SSH SCRIPT EXECUTION STARTED - $(date)"
+          echo "Current user: $(whoami)"
+          echo "Current directory: $(pwd)"
+          echo "Available disk space: $(df -h /)"
+          cd /home/ec2-user
+          echo "=== FRESH DEPLOYMENT - CLEARING EVERYTHING ==="
+          
+          # Ensure Docker is running
+          echo "🐳 Checking Docker service..."
+          sudo systemctl start docker || echo "Docker service started"
+          sudo systemctl status docker || echo "Docker service status checked"
+          docker --version || echo "Docker version checked"
+          
+          # Complete cleanup - remove everything
+          echo "🧹 Cleaning up all existing deployments..."
+          docker stop $(docker ps -aq) 2>/dev/null || echo "No containers to stop"
+          docker rm $(docker ps -aq) 2>/dev/null || echo "No containers to remove"
+          docker rmi $(docker images -q) 2>/dev/null || echo "No images to remove"
+          docker system prune -af 2>/dev/null || echo "Docker system cleanup completed"
+          
+          # Remove all app directories
+          echo "🗑️ Removing all app directories..."
+          rm -rf app2* 2>/dev/null || echo "No app directories to remove"
+          rm -f app2-deployment.tar.gz 2>/dev/null || echo "No deployment package to remove"
+          
+          # Verify clean state
+          echo "✅ Clean state verified:"
+          echo "Docker containers:"
+          docker ps -a
+          echo "Docker images:"
+          docker images
+          echo "Directory contents:"
+          ls -la
+          
+          # Extract new deployment
+          echo "📦 Extracting fresh deployment..."
+          echo "Checking if deployment package exists:"
+          ls -la app2-deployment.tar.gz
+          echo "Current directory contents before extraction:"
+          ls -la
+          
+          # Check if package exists, if not, look for it
+          if [ ! -f "app2-deployment.tar.gz" ]; then
+            echo "❌ Deployment package not found in current directory"
+            echo "Searching for deployment package..."
+            PACKAGE_PATH=$(find /home/ec2-user -name "app2-deployment.tar.gz" -type f 2>/dev/null | head -1)
+            if [ -n "$PACKAGE_PATH" ]; then
+              echo "✅ Found deployment package at: $PACKAGE_PATH"
+              echo "Copying to current directory..."
+              cp "$PACKAGE_PATH" ./app2-deployment.tar.gz
+              echo "Package copied successfully"
+            else
+              echo "❌ Deployment package not found anywhere"
+              echo "Current working directory: $(pwd)"
+              echo "Directory contents:"
+              ls -la
+              exit 1
+            fi
+          fi
+          
+          echo "✅ Deployment package found, proceeding with extraction..."
+          echo "Extracting to app2 directory..."
+          mkdir -p app2
+          cd app2
+          echo "Extracting from: $(pwd)/../app2-deployment.tar.gz"
+          tar -xzf ../app2-deployment.tar.gz
+          echo "Extracted files in app2 directory:"
+          ls -la
+          echo "Checking for Dockerfile:"
+          ls -la Dockerfile
+          echo "Checking for package.json:"
+          ls -la package.json
+          echo "Checking for server.js:"
+          ls -la server.js
+          cd ..
+          echo "✅ Fresh deployment extraction completed"
+          
+          # Create .env file on EC2 with environment variables
+          cd app2
+          echo "📝 Creating .env file with secrets..."
+          {
+            echo "NODE_ENV=${{ secrets.NODE_ENV }}"
+            echo "PORT=${{ secrets.PORT }}"
+            echo "ENVIRONMENT=${{ secrets.ENVIRONMENT }}"
+            echo ""
+            echo "# AWS Configuration"
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}"
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}"
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            echo "AWS_DEFAULT_REGION=${{ secrets.AWS_REGION }}"
+            echo ""
+            echo "# DynamoDB Tables"
+            echo "ADMIN_KEYS_TABLE=${{ secrets.ADMIN_KEYS_TABLE }}"
+            echo "EXTERNAL_USER_LOGS_TABLE=${{ secrets.EXTERNAL_USER_LOGS_TABLE }}"
+            echo "DDB_USERS_TABLE=${{ secrets.DDB_USERS_TABLE }}"
+            echo "DDB_CUSTOMERS_TABLE=${{ secrets.DDB_CUSTOMERS_TABLE }}"
+            echo "DDB_FEEDBACK_TABLE=${{ secrets.DDB_FEEDBACK_TABLE }}"
+            echo "DDB_ORDERS_TABLE=${{ secrets.DDB_ORDERS_TABLE }}"
+            echo "DDB_ANALYTICS_TABLE=${{ secrets.DDB_ANALYTICS_TABLE }}"
+            echo "DDB_ADMIN_KEYS_TABLE=${{ secrets.DDB_ADMIN_KEYS_TABLE }}"
+            echo "DDB_EXTERNAL_LOGS_TABLE=${{ secrets.DDB_EXTERNAL_LOGS_TABLE }}"
+            echo ""
+            echo "# React App Environment Variables"
+            echo "REACT_APP_AWS_REGION=${{ secrets.REACT_APP_AWS_REGION }}"
+            echo "REACT_APP_ENVIRONMENT=${{ secrets.REACT_APP_ENVIRONMENT }}"
+            echo "REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}"
+            echo "REACT_APP_BACKEND_URL=${{ secrets.REACT_APP_BACKEND_URL }}"
+            echo "REACT_APP_BUILD_ENV=${{ secrets.REACT_APP_BUILD_ENV }}"
+            echo "REACT_APP_AWS_ACCESS_KEY_ID=${{ secrets.REACT_APP_AWS_ACCESS_KEY_ID }}"
+            echo "REACT_APP_AWS_SECRET_ACCESS_KEY=${{ secrets.REACT_APP_AWS_SECRET_ACCESS_KEY }}"
+            echo "REACT_APP_ENABLE_LOGGING=${{ secrets.REACT_APP_ENABLE_LOGGING }}"
+            echo "REACT_APP_ENABLE_ANALYTICS=${{ secrets.REACT_APP_ENABLE_ANALYTICS }}"
+            echo ""
+            echo "# Security & Authentication"
+            echo "ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}"
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            echo "PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}"
+            echo ""
+            echo "# CORS Configuration"
+            echo "CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}"
+            echo ""
+            echo "# Logging Configuration"
+            echo "LOG_LEVEL=${{ secrets.LOG_LEVEL }}"
+            echo "LOG_FILE_PATH=${{ secrets.LOG_FILE_PATH }}"
+            echo ""
+            echo "# Performance & Monitoring"
+            echo "MAX_REQUEST_SIZE=${{ secrets.MAX_REQUEST_SIZE }}"
+            echo "REQUEST_TIMEOUT=${{ secrets.REQUEST_TIMEOUT }}"
+            echo ""
+            echo "# Frontend Configuration"
+            echo "FRONTEND_API_BASE_URL=${{ secrets.FRONTEND_API_BASE_URL }}"
+            echo "BACKEND_URL=${{ secrets.BACKEND_URL }}"
+            echo ""
+            echo "# EC2 Deployment Configuration"
+            echo "EC2_HOST=${{ secrets.EC2_HOST }}"
+            echo "EC2_USER=${{ secrets.EC2_USER }}"
+            echo "EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}"
+            echo "EC2_SSH_PRIVATE_KEY=${{ secrets.EC2_SSH_PRIVATE_KEY }}"
+          } > .env
+          
+          echo "✅ .env file created successfully"
+          echo "📋 Verifying .env file contents:"
+          ls -la .env
+          echo "First few lines of .env file:"
+          head -10 .env
+          echo "Environment variables count:"
+          wc -l .env
+          
+          # Build and run new container
+          echo "🐳 Building fresh Docker image..."
+          echo "Current directory contents:"
+          ls -la
+          echo "Checking Dockerfile exists:"
+          ls -la Dockerfile
+          echo "Starting Docker build with verbose output..."
+          
+          # Build with verbose output and capture all logs
+          docker build -t app2 . --progress=plain --no-cache 2>&1 | tee docker-build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Docker build failed with exit code: $BUILD_EXIT_CODE"
+            echo "Docker build logs:"
+            cat docker-build.log
+            echo "Checking Docker system info:"
+            docker system df
+            docker system info
+            exit 1
+          fi
+          echo "✅ Docker build completed successfully"
+          echo "Docker images after build:"
+          docker images
+          
+          echo "🚀 Starting fresh Docker container..."
+          if ! docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2; then
+            echo "❌ Docker run failed!"
+            echo "Checking for existing container..."
+            docker ps -a
+            echo "Removing existing container if it exists..."
+            docker rm -f app2-container || true
+            echo "Retrying container start..."
+            docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2
+          fi
+          
+          echo "⏳ Waiting for container to start..."
+          sleep 10
+          
+          echo "📊 Checking container status..."
+          docker ps -a
+          
+          echo "📋 Checking container logs..."
+          docker logs app2-container --tail 50
+          
+          echo "🔍 Checking if container is actually running..."
+          if docker ps | grep -q app2-container; then
+            echo "✅ Container is running!"
+            echo "🌐 Testing internal container connectivity..."
+            docker exec app2-container curl -f http://localhost:3001/ || echo "❌ Internal connectivity test failed"
+          else
+            echo "❌ Container is not running!"
+            echo "Container status:"
+            docker ps -a | grep app2-container
+          fi
+          
+          # Cleanup
+          rm -f /home/ec2-user/app2-deployment.tar.gz
+          rm -rf /home/ec2-user/app2-old
+          
+          echo "🎉 Deployment completed successfully!"
+          echo "🏁 SSH SCRIPT EXECUTION COMPLETED - $(date)"
+        EOF
+        
+    - name: Verify deployment
+      run: |
+        echo "Waiting for application to start..."
+        sleep 15
+        
+        echo "Checking if application is running..."
+        for i in {1..5}; do
+          echo "Attempt $i/5: Testing connection to ${{ secrets.EC2_HOST }}:3001"
+          if curl -f --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}:3001/; then
+            echo "✅ Application is running successfully!"
+            exit 0
+          else
+            echo "❌ Connection failed, waiting 10 seconds before retry..."
+            sleep 10
+          fi
+        done
+        
+        echo "❌ Application verification failed after 5 attempts"
+        echo "Checking Docker container status on EC2..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "=== Docker Container Status ==="
+          docker ps -a
+          echo "=== Docker Logs ==="
+          docker logs app2-container --tail 50
+          echo "=== Application Process ==="
+          ps aux | grep node
+        EOF
+        exit 1
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f ~/.ssh/app2-key-pair.pem
+        rm -f app2-deployment.tar.gz
