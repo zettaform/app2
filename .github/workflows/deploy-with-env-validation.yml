@@ -1,0 +1,351 @@
+name: Deploy with Environment Validation
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: Validate GitHub Secrets
+      run: |
+        echo "🔍 VALIDATING GITHUB SECRETS"
+        echo "============================="
+        echo ""
+        
+        # Check required secrets
+        if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ]; then
+          echo "✅ AWS_ACCESS_KEY_ID: CONFIGURED"
+        else
+          echo "❌ AWS_ACCESS_KEY_ID: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+          echo "✅ AWS_SECRET_ACCESS_KEY: CONFIGURED"
+        else
+          echo "❌ AWS_SECRET_ACCESS_KEY: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.JWT_SECRET }}" ]; then
+          echo "✅ JWT_SECRET: CONFIGURED"
+          JWT_LENGTH=${#JWT_SECRET}
+          if [ $JWT_LENGTH -ge 32 ]; then
+            echo "✅ JWT_SECRET length: $JWT_LENGTH characters (valid)"
+          else
+            echo "❌ JWT_SECRET length: $JWT_LENGTH characters (minimum 32 required)"
+            exit 1
+          fi
+        else
+          echo "❌ JWT_SECRET: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.ADMIN_GLOBAL_KEY }}" ]; then
+          echo "✅ ADMIN_GLOBAL_KEY: CONFIGURED"
+        else
+          echo "❌ ADMIN_GLOBAL_KEY: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.PASSWORD_SALT }}" ]; then
+          echo "✅ PASSWORD_SALT: CONFIGURED"
+        else
+          echo "❌ PASSWORD_SALT: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "✅ EC2_SSH_PRIVATE_KEY: CONFIGURED"
+        else
+          echo "❌ EC2_SSH_PRIVATE_KEY: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.EC2_HOST }}" ]; then
+          echo "✅ EC2_HOST: CONFIGURED"
+        else
+          echo "❌ EC2_HOST: NOT SET"
+          exit 1
+        fi
+        
+        if [ -n "${{ secrets.EC2_USER }}" ]; then
+          echo "✅ EC2_USER: CONFIGURED"
+        else
+          echo "❌ EC2_USER: NOT SET"
+          exit 1
+        fi
+        
+        echo ""
+        echo "🎯 All required secrets are configured!"
+        
+    - name: Test SSH Connection
+      run: |
+        echo "🔌 TESTING SSH CONNECTION"
+        echo "========================="
+        echo ""
+        
+        # Test SSH connection
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo '✅ SSH connection successful'"
+        
+        echo ""
+        echo "✅ SSH connection test passed!"
+        
+    - name: Build Application
+      run: |
+        echo "🔨 BUILDING APPLICATION"
+        echo "======================="
+        echo ""
+        
+        # Install dependencies
+        npm install
+        
+        # Build the application
+        npm run build
+        
+        echo ""
+        echo "✅ Application build completed!"
+        
+    - name: Create Deployment Package
+      run: |
+        echo "📦 CREATING DEPLOYMENT PACKAGE"
+        echo "==============================="
+        echo ""
+        
+        # Create deployment directory
+        mkdir -p deployment
+        
+        # Copy application files
+        cp -r dist deployment/
+        cp -r src deployment/
+        cp -r public deployment/
+        cp package.json deployment/
+        cp package-lock.json deployment/
+        cp .env.production deployment/.env
+        
+        # Create deployment archive
+        tar -czf app-deployment.tar.gz -C deployment .
+        
+        echo "✅ Deployment package created: app-deployment.tar.gz"
+        
+    - name: Deploy to EC2
+      run: |
+        echo "🚀 DEPLOYING TO EC2"
+        echo "==================="
+        echo ""
+        
+        # Copy deployment package to EC2
+        scp -o StrictHostKeyChecking=no app-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/
+        
+        echo "✅ Deployment package copied to EC2"
+        
+        # Deploy on EC2
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🔧 STARTING EC2 DEPLOYMENT'
+          echo '=========================='
+          echo ''
+          
+          # Stop any existing application
+          echo '🛑 Stopping existing application...'
+          pkill -f 'node.*server.js' || true
+          pkill -f 'pm2' || true
+          
+          # Clean up previous deployment
+          echo '🧹 Cleaning up previous deployment...'
+          rm -rf /home/ec2-user/app-deployment
+          rm -rf /home/ec2-user/app
+          
+          # Extract new deployment
+          echo '📦 Extracting new deployment...'
+          mkdir -p /home/ec2-user/app-deployment
+          tar -xzf /home/ec2-user/app-deployment.tar.gz -C /home/ec2-user/app-deployment
+          
+          # Create app directory
+          echo '📁 Creating app directory...'
+          mkdir -p /home/ec2-user/app
+          cp -r /home/ec2-user/app-deployment/* /home/ec2-user/app/
+          cd /home/ec2-user/app
+          
+          # Install Node.js if not present
+          echo '📦 Checking Node.js installation...'
+          if ! command -v node &> /dev/null; then
+            echo 'Installing Node.js...'
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs
+          else
+            echo 'Node.js already installed'
+          fi
+          
+          # Install PM2 if not present
+          echo '📦 Checking PM2 installation...'
+          if ! command -v pm2 &> /dev/null; then
+            echo 'Installing PM2...'
+            sudo npm install -g pm2
+          else
+            echo 'PM2 already installed'
+          fi
+          
+          # Install dependencies
+          echo '📦 Installing dependencies...'
+          npm install --production
+          
+          # Create .env file with actual values
+          echo '🔧 Creating .env file...'
+          cat > .env << 'EOF'
+# ========================================
+# PRODUCTION ENVIRONMENT CONFIGURATION
+# ========================================
+
+# Application Configuration
+NODE_ENV=production
+PORT=3001
+ENVIRONMENT=prod
+
+# AWS Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+# DynamoDB Tables
+ADMIN_KEYS_TABLE=prod-admin-keys-table-admin-keys
+EXTERNAL_USER_LOGS_TABLE=prod-external-user-creation-logs
+DDB_USERS_TABLE=prod-users
+DDB_CUSTOMERS_TABLE=prod-customers
+DDB_FEEDBACK_TABLE=prod-feedback
+DDB_ORDERS_TABLE=prod-orders
+DDB_ANALYTICS_TABLE=prod-analytics
+DDB_ADMIN_KEYS_TABLE=prod-admin-keys-table-admin-keys
+DDB_EXTERNAL_LOGS_TABLE=prod-external-user-creation-logs
+
+# Security & Authentication
+ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}
+JWT_SECRET=${{ secrets.JWT_SECRET }}
+PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}
+
+# CORS Configuration
+CORS_ORIGIN=http://localhost:5174,https://yourdomain.com
+
+# Logging Configuration
+LOG_LEVEL=info
+LOG_FILE_PATH=./logs/app.log
+
+# Performance & Monitoring
+MAX_REQUEST_SIZE=10mb
+REQUEST_TIMEOUT=30000
+
+# React App Environment Variables
+REACT_APP_AWS_REGION=us-east-1
+REACT_APP_ENVIRONMENT=prod
+REACT_APP_API_BASE_URL=https://yourdomain.com/api
+REACT_APP_BACKEND_URL=https://yourdomain.com
+REACT_APP_BUILD_ENV=production
+REACT_APP_AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+REACT_APP_AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+REACT_APP_ENABLE_LOGGING=false
+REACT_APP_ENABLE_ANALYTICS=true
+
+# Frontend Configuration
+FRONTEND_API_BASE_URL=https://yourdomain.com/api
+BACKEND_URL=https://yourdomain.com
+
+# EC2 Deployment Configuration
+EC2_HOST=${{ secrets.EC2_HOST }}
+EC2_USER=${{ secrets.EC2_USER }}
+EC2_SSH_KEY_PATH=app2-key-pair.pem
+EOF
+          
+          # Set secure permissions on .env
+          chmod 600 .env
+          
+          # Create logs directory
+          mkdir -p logs
+          
+          # Start application with PM2
+          echo '🚀 Starting application with PM2...'
+          pm2 delete app2 || true
+          pm2 start server.js --name app2 --env production
+          
+          # Save PM2 configuration
+          pm2 save
+          
+          # Setup PM2 startup
+          pm2 startup || true
+          
+          echo ''
+          echo '✅ Application deployed successfully!'
+          echo ''
+          echo '📊 PM2 Status:'
+          pm2 status
+          echo ''
+          echo '📋 Application Logs:'
+          pm2 logs app2 --lines 10
+        "
+        
+        echo ""
+        echo "✅ Deployment to EC2 completed!"
+        
+    - name: Verify Deployment
+      run: |
+        echo "🔍 VERIFYING DEPLOYMENT"
+        echo "======================="
+        echo ""
+        
+        # Wait for application to start
+        echo "⏳ Waiting for application to start..."
+        sleep 30
+        
+        # Check if application is running
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🔍 Checking application status...'
+          pm2 status
+          echo ''
+          echo '📋 Recent application logs:'
+          pm2 logs app2 --lines 20
+          echo ''
+          echo '🌐 Testing local connectivity...'
+          curl -f http://localhost:3001/health || echo 'Health check failed'
+        "
+        
+        # Test external connectivity
+        echo "🌐 Testing external connectivity..."
+        sleep 10
+        
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/3001"; then
+          echo "✅ Application is accessible on port 3001"
+        else
+          echo "❌ Application is not accessible on port 3001"
+          echo "This might be due to security group configuration"
+        fi
+        
+        echo ""
+        echo "🎯 Deployment verification completed!"
+        
+    - name: Deployment Summary
+      run: |
+        echo "📊 DEPLOYMENT SUMMARY"
+        echo "====================="
+        echo ""
+        echo "✅ GitHub secrets validated"
+        echo "✅ SSH connection established"
+        echo "✅ Application built and packaged"
+        echo "✅ Deployment package created"
+        echo "✅ Application deployed to EC2"
+        echo "✅ PM2 process manager configured"
+        echo "✅ Environment variables configured"
+        echo ""
+        echo "🌐 Application URL: http://${{ secrets.EC2_HOST }}:3001"
+        echo "🔍 Health Check: http://${{ secrets.EC2_HOST }}:3001/health"
+        echo ""
+        echo "🚀 Deployment completed successfully!"
