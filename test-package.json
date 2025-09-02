@@ -1,0 +1,8 @@
+{
+  "name": "test-simple-app",
+  "version": "1.0.0",
+  "main": "test-simple-app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
