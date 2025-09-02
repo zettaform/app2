@@ -1,0 +1,36 @@
+name: Ultra Minimal Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: Deploy to EC2
+      run: |
+        echo "🚀 Starting ultra minimal deployment..."
+        
+        # Test SSH connection
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"
+        
+        # Create a simple test file
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo 'Creating test file...'
+          echo 'Hello from EC2!' > /home/ec2-user/test.txt
+          cat /home/ec2-user/test.txt
+          echo 'Test file created successfully!'
+        "
+        
+        echo "✅ Ultra minimal deployment completed!"
