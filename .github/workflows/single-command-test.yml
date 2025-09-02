@@ -1,0 +1,28 @@
+name: Single Command Test
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: Test Single Command
+      run: |
+        echo "🧪 Testing single command execution on EC2..."
+        
+        # Run a single simple command
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SUCCESS: Single command executed on EC2'"
+        
+        echo "✅ Single command test completed!"
