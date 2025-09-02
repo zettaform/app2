@@ -54,18 +54,26 @@ jobs:
         # Deploy on EC2
         ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           cd /home/ec2-user
+          echo "=== Starting deployment process ==="
           
           # Stop existing container
-          docker stop app2-container 2>/dev/null || true
-          docker rm app2-container 2>/dev/null || true
+          echo "Stopping existing container..."
+          docker stop app2-container 2>/dev/null || echo "No existing container to stop"
+          docker rm app2-container 2>/dev/null || echo "No existing container to remove"
           
           # Remove old app directory
+          echo "Backing up current deployment..."
           rm -rf app2-old
-          mv app2 app2-old 2>/dev/null || true
+          mv app2 app2-old 2>/dev/null || echo "No existing deployment to backup"
           
           # Extract new deployment
+          echo "Extracting new deployment..."
           tar -xzf app2-deployment.tar.gz
+          echo "Extracted files:"
+          ls -la
+          echo "Moving extracted directory to app2..."
           mv $(ls -1 | grep -v app2-old | grep -v app2-deployment.tar.gz | head -1) app2
+          echo "Deployment extraction completed"
           
           # Create .env file on EC2 with environment variables
           cd app2
@@ -131,10 +139,16 @@ jobs:
           
           # Build and run new container
           echo "Building Docker image..."
+          echo "Current directory contents:"
+          ls -la
+          echo "Starting Docker build..."
           if ! docker build -t app2 .; then
             echo "❌ Docker build failed!"
+            echo "Docker build logs:"
+            docker build -t app2 . 2>&1 || true
             exit 1
           fi
+          echo "✅ Docker build completed successfully"
           
           echo "Starting Docker container..."
           if ! docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2; then
