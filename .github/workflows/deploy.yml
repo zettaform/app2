@@ -80,9 +80,16 @@ jobs:
         echo "SSH key file exists: $(ls -la ~/.ssh/app2-key-pair.pem)"
         echo "SSH key permissions: $(stat -c '%a' ~/.ssh/app2-key-pair.pem)"
         
-        # Execute SSH with error handling
-        if ! ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+        # Execute SSH with error handling and verbose output
+        echo "Testing basic SSH connectivity..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH basic test successful'"
+        
+        echo "Executing SSH deployment with verbose output..."
+        ssh -i ~/.ssh/app2-key-pair.pem -v ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           echo "🚀 SSH SCRIPT EXECUTION STARTED - $(date)"
+          echo "Current user: $(whoami)"
+          echo "Current directory: $(pwd)"
+          echo "Available disk space: $(df -h /)"
           cd /home/ec2-user
           echo "=== FRESH DEPLOYMENT - CLEARING EVERYTHING ==="
           
