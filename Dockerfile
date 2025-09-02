@@ -22,7 +22,9 @@ RUN npm cache clean --force && \
 COPY . .
 
 # Build the React app
-RUN npm run build
+RUN echo "Starting React build..." && \
+    npm run build && \
+    echo "React build completed successfully"
 
 # Remove dev dependencies after build to reduce image size
 RUN npm prune --production --no-audit --no-fund
@@ -43,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node --version || exit 1
 
 # Start the server with centralized environment configuration
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "echo 'Starting App2 server...' && node server.js"]

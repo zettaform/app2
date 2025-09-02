@@ -135,8 +135,31 @@ jobs:
           ENVEOF
           
           # Build and run new container
-          docker build -t app2 .
-          docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2
+          echo "Building Docker image..."
+          if ! docker build -t app2 .; then
+            echo "❌ Docker build failed!"
+            exit 1
+          fi
+          
+          echo "Starting Docker container..."
+          if ! docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2; then
+            echo "❌ Docker run failed!"
+            echo "Checking for existing container..."
+            docker ps -a
+            echo "Removing existing container if it exists..."
+            docker rm -f app2-container || true
+            echo "Retrying container start..."
+            docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2
+          fi
+          
+          echo "Waiting for container to start..."
+          sleep 5
+          
+          echo "Checking container status..."
+          docker ps -a
+          
+          echo "Checking container logs..."
+          docker logs app2-container --tail 20
           
           # Cleanup
           rm -f /home/ec2-user/app2-deployment.tar.gz
