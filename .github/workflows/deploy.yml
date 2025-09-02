@@ -50,6 +50,10 @@ jobs:
         echo "Checking deployment package size..."
         ls -lh app2-deployment.tar.gz
         
+        # Verify package contents
+        echo "Verifying package contents:"
+        tar -tzf app2-deployment.tar.gz | head -20
+        
         # Clean up temp directory
         rm -rf deployment-temp
         echo "✅ Deployment package created successfully"
@@ -72,7 +76,12 @@ jobs:
         echo "✅ SSH connection successful"
         
         echo "Executing SSH deployment script..."
-        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+        echo "SSH command: ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
+        echo "SSH key file exists: $(ls -la ~/.ssh/app2-key-pair.pem)"
+        echo "SSH key permissions: $(stat -c '%a' ~/.ssh/app2-key-pair.pem)"
+        
+        # Execute SSH with error handling
+        if ! ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           echo "🚀 SSH SCRIPT EXECUTION STARTED - $(date)"
           cd /home/ec2-user
           echo "=== FRESH DEPLOYMENT - CLEARING EVERYTHING ==="
@@ -248,7 +257,13 @@ jobs:
           echo "🏁 SSH SCRIPT EXECUTION COMPLETED - $(date)"
         EOF
         
-        echo "✅ SSH deployment script execution finished"
+        then
+          echo "✅ SSH deployment script completed successfully"
+        else
+          echo "❌ SSH deployment script failed!"
+          echo "SSH exit code: $?"
+          exit 1
+        fi
         
     - name: Verify deployment
       run: |
