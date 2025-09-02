@@ -131,7 +131,7 @@ jobs:
           
           # Build and run new container
           docker build -t app2 .
-          docker run -d -p 3001:3001 --name app2-container app2
+          docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2
           
           # Cleanup
           rm -f /home/ec2-user/app2-deployment.tar.gz
@@ -142,9 +142,32 @@ jobs:
         
     - name: Verify deployment
       run: |
-        sleep 10
-        curl -f http://${{ secrets.EC2_HOST }}:3001/ || exit 1
-        echo "Application is running successfully!"
+        echo "Waiting for application to start..."
+        sleep 15
+        
+        echo "Checking if application is running..."
+        for i in {1..5}; do
+          echo "Attempt $i/5: Testing connection to ${{ secrets.EC2_HOST }}:3001"
+          if curl -f --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}:3001/; then
+            echo "✅ Application is running successfully!"
+            exit 0
+          else
+            echo "❌ Connection failed, waiting 10 seconds before retry..."
+            sleep 10
+          fi
+        done
+        
+        echo "❌ Application verification failed after 5 attempts"
+        echo "Checking Docker container status on EC2..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "=== Docker Container Status ==="
+          docker ps -a
+          echo "=== Docker Logs ==="
+          docker logs app2-container --tail 50
+          echo "=== Application Process ==="
+          ps aux | grep node
+        EOF
+        exit 1
         
     - name: Cleanup
       if: always()
