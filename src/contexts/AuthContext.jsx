@@ -43,26 +43,59 @@ export const AuthProvider = ({ children }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check for authentication on initial load
+    // Fast authentication check with timeout
     const checkAuth = async () => {
       try {
-        if (backendAuthService.isAuthenticated()) {
-          const currentUser = await backendAuthService.getCurrentUser();
-          if (currentUser) {
-            setUser(currentUser);
-          } else {
-            // Try backup data for refresh scenarios only
-            try {
-              const backup = JSON.parse(sessionStorage.getItem('mosaic_user_backup') || 'null');
-              if (backup) {
-                setUser(backup);
-              } else {
+        // Quick check for token first
+        if (!backendAuthService.isAuthenticated()) {
+          setLoading(false);
+          return;
+        }
+
+        // Try backup data first for faster refresh recovery
+        const backup = sessionStorage.getItem('mosaic_user_backup');
+        if (backup) {
+          try {
+            const userData = JSON.parse(backup);
+            setUser(userData);
+            setLoading(false);
+            
+            // Validate token in background
+            setTimeout(async () => {
+              try {
+                const currentUser = await backendAuthService.getCurrentUser();
+                if (currentUser) {
+                  setUser(currentUser);
+                  sessionStorage.setItem('mosaic_user_backup', JSON.stringify(currentUser));
+                } else {
+                  backendAuthService.signout();
+                  setUser(null);
+                }
+              } catch (error) {
+                console.error('Background auth validation failed:', error);
                 backendAuthService.signout();
+                setUser(null);
               }
-            } catch (e) {
-              backendAuthService.signout();
-            }
+            }, 100);
+            return;
+          } catch (e) {
+            // Backup data corrupted, continue with normal flow
           }
+        }
+
+        // Normal authentication flow with timeout
+        const authPromise = backendAuthService.getCurrentUser();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        );
+
+        const currentUser = await Promise.race([authPromise, timeoutPromise]);
+        
+        if (currentUser) {
+          setUser(currentUser);
+          sessionStorage.setItem('mosaic_user_backup', JSON.stringify(currentUser));
+        } else {
+          backendAuthService.signout();
         }
       } catch (error) {
         console.error('Auth check error:', error);

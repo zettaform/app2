@@ -13,15 +13,22 @@ class BackendAuthService {
     this.tokenKey = 'mosaic_auth_token';
   }
 
-  // Helper method for API calls with error handling
+  // Helper method for API calls with error handling and timeout
   async makeApiCall(endpoint, options = {}) {
     try {
       const url = buildApiUrl(endpoint);
+      
+      // Create AbortController for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout || 10000);
+      
       const response = await fetch(url, {
         headers: this.headers,
-        timeout: this.timeout,
+        signal: controller.signal,
         ...options
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -30,6 +37,10 @@ class BackendAuthService {
 
       return await response.json();
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.error(`Authentication API call timed out for ${endpoint}`);
+        throw new Error('Request timeout - please check your connection');
+      }
       console.error(`Authentication API call failed for ${endpoint}:`, error);
       throw error;
     }
@@ -160,9 +171,8 @@ class BackendAuthService {
     if (!token) return true;
 
     try {
-      // Decode the token to check expiration
-      // This is a simple base64 decode - in production, use proper JWT validation
-      const decoded = Buffer.from(token, 'base64').toString();
+      // Browser-compatible base64 decode
+      const decoded = atob(token);
       const parts = decoded.split(':');
       
       if (parts.length >= 2) {
