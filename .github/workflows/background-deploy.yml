@@ -97,12 +97,13 @@ jobs:
     - name: Full Deploy
       if: github.event.inputs.deployment_type == 'full'
       run: |
-        # Create deployment package
+        # Create deployment package (exclude tar file itself to prevent conflicts)
         tar -czf app2-deployment.tar.gz \
           --exclude='.git' \
           --exclude='node_modules' \
           --exclude='.github' \
           --exclude='*.log' \
+          --exclude='app2-deployment.tar.gz' \
           .
           
         # Copy to EC2
@@ -120,12 +121,12 @@ jobs:
           rm -rf app2-backup
           mv app2 app2-backup 2>/dev/null || true
           
-          # Extract new deployment
-          tar -xzf app2-deployment.tar.gz
-          mv $(ls -1 | grep -v app2-backup | grep -v app2-deployment.tar.gz | head -1) app2
+          # Create new app directory and extract
+          mkdir -p app2
+          cd app2
+          tar -xzf ../app2-deployment.tar.gz --strip-components=0
           
           # Build and run new container
-          cd app2
           docker build -t app2 .
           docker run -d -p 3001:3001 --name app2-container app2
           
