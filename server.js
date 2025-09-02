@@ -4,23 +4,20 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, ScanCommand, DeleteCommand, QueryCommand, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { ENV_CONFIG, ENV_VALIDATION, getTableName } from './src/config/environment.js';
 
 // Load environment variables
 dotenv.config();
 
-// Validate required environment variables
-const requiredEnvVars = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];
-const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
-
-if (missingEnvVars.length > 0) {
-  console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
-  console.error('Please check your .env file or environment configuration.');
+// Validate environment configuration
+if (!ENV_VALIDATION.isValid) {
+  console.error('❌ Environment validation failed. Please check your configuration.');
   process.exit(1);
 }
 
 const app = express();
-const PORT = process.env.PORT || 3001;
-const ENVIRONMENT = process.env.ENVIRONMENT || 'dev';
+const PORT = ENV_CONFIG.PORT;
+const ENVIRONMENT = ENV_CONFIG.ENVIRONMENT;
 
 // Enhanced CORS configuration for production
 const corsOptions = {
@@ -28,9 +25,7 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = process.env.CORS_ORIGIN 
-      ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
-      : ['http://localhost:5174', 'http://localhost:3000'];
+    const allowedOrigins = ENV_CONFIG.CORS.ORIGIN;
     
     if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
       callback(null, true);
@@ -47,12 +42,12 @@ const corsOptions = {
 
 // Middleware
 app.use(cors(corsOptions));
-app.use(express.json({ limit: process.env.MAX_REQUEST_SIZE || '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: process.env.MAX_REQUEST_SIZE || '10mb' }));
+app.use(express.json({ limit: ENV_CONFIG.PERFORMANCE.MAX_REQUEST_SIZE }));
+app.use(express.urlencoded({ extended: true, limit: ENV_CONFIG.PERFORMANCE.MAX_REQUEST_SIZE }));
 
 // Request timeout middleware
 app.use((req, res, next) => {
-  const timeout = parseInt(process.env.REQUEST_TIMEOUT) || 30000;
+  const timeout = ENV_CONFIG.PERFORMANCE.REQUEST_TIMEOUT;
   req.setTimeout(timeout, () => {
     res.status(408).json({ success: false, error: 'Request timeout' });
   });
@@ -72,34 +67,26 @@ app.use((req, res, next) => {
 
 // AWS Configuration
 const awsConfig = {
-  region: process.env.AWS_REGION || 'us-east-1',
+  region: ENV_CONFIG.AWS.REGION,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+    accessKeyId: ENV_CONFIG.AWS.ACCESS_KEY_ID,
+    secretAccessKey: ENV_CONFIG.AWS.SECRET_ACCESS_KEY
   }
 };
 
 const dynamoClient = new DynamoDBClient(awsConfig);
 const docClient = DynamoDBDocumentClient.from(dynamoClient);
 
-// Helper function to get table name
-const getTableName = (baseName) => `${ENVIRONMENT}-${baseName}`;
+// Helper function to get table name (now imported from environment config)
 
 // Enhanced password hashing with salt
 const hashPassword = (password) => {
-  const salt = process.env.PASSWORD_SALT || 'default_salt_2024';
+  const salt = ENV_CONFIG.SECURITY.PASSWORD_SALT;
   return Buffer.from(password + salt).toString('base64').replace(/[^a-zA-Z0-9]/g, '');
 };
 
-// JWT secret validation
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  console.warn('⚠️ JWT_SECRET is weak or missing. Using fallback secret for development only.');
-  if (ENVIRONMENT === 'production') {
-    console.error('❌ JWT_SECRET must be at least 32 characters long in production!');
-    process.exit(1);
-  }
-}
+// JWT secret validation (now handled in environment config)
+const JWT_SECRET = ENV_CONFIG.SECURITY.JWT_SECRET;
 
 // Log external user creation
 const logExternalUserCreation = async (userData, adminKeyInfo, success, error = null) => {
@@ -145,11 +132,11 @@ const logExternalUserCreation = async (userData, adminKeyInfo, success, error = 
 };
 
 // Admin keys table configuration
-const ADMIN_KEYS_TABLE = process.env.ADMIN_KEYS_TABLE || `${ENVIRONMENT}-admin-keys-table-admin-keys`;
-const EXTERNAL_USER_LOGS_TABLE = process.env.EXTERNAL_USER_LOGS_TABLE || `${ENVIRONMENT}-external-user-creation-logs`;
+const ADMIN_KEYS_TABLE = ENV_CONFIG.TABLES.ADMIN_KEYS;
+const EXTERNAL_USER_LOGS_TABLE = ENV_CONFIG.TABLES.EXTERNAL_LOGS;
 
 // Legacy admin key for backward compatibility
-const ADMIN_GLOBAL_KEY = process.env.ADMIN_GLOBAL_KEY || 'admin_global_key_2024_secure_123';
+const ADMIN_GLOBAL_KEY = ENV_CONFIG.SECURITY.ADMIN_GLOBAL_KEY;
 
 // Middleware to check admin global key
 const validateAdminKey = async (req, res, next) => {
