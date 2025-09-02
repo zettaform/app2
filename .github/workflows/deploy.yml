@@ -38,11 +38,8 @@ jobs:
       run: |
         # Create deployment package in a clean directory to avoid file conflicts
         mkdir -p deployment-temp
-        cp -r . deployment-temp/
+        rsync -av --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='dist' --exclude='build' --exclude='*.log' --exclude='.env*' --exclude='app2-deployment.tar.gz' --exclude='deployment-temp' . deployment-temp/
         cd deployment-temp
-        
-        # Remove files that shouldn't be deployed
-        rm -rf .git .github node_modules dist build *.log .env* app2-deployment.tar.gz
         
         # Create tar archive from clean directory
         tar -czf ../app2-deployment.tar.gz .
