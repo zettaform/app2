@@ -170,10 +170,10 @@ function generateEC2SetupInstructions() {
 }
 
 // Main execution
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   validateSecrets();
   generateSSHKeyInstructions();
   generateEC2SetupInstructions();
 }
 
-module.exports = { validateSecrets, requiredSecrets };
+export { validateSecrets, requiredSecrets };
