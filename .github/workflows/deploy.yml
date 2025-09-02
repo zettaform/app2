@@ -187,7 +187,7 @@ jobs:
           EC2_USER=${{ secrets.EC2_USER }}
           EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}
           EC2_SSH_PRIVATE_KEY=${{ secrets.EC2_SSH_PRIVATE_KEY }}
-ENVEOF
+          ENVEOF
           
           echo "✅ .env file created successfully"
           echo "📋 Verifying .env file contents:"
