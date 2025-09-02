@@ -1,0 +1,140 @@
+name: Auto Deploy to EC2
+
+on:
+  push:
+    branches: [ main, app2-main ]
+  pull_request:
+    branches: [ main, app2-main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Create environment file
+      run: |
+        cat > .env << EOF
+        NODE_ENV=${{ secrets.NODE_ENV }}
+        PORT=${{ secrets.PORT }}
+        ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+        
+        # AWS Configuration
+        AWS_REGION=${{ secrets.AWS_REGION }}
+        AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        
+        # Database Configuration
+        DDB_USERS_TABLE=${{ secrets.DDB_USERS_TABLE }}
+        DDB_CUSTOMERS_TABLE=${{ secrets.DDB_CUSTOMERS_TABLE }}
+        DDB_FEEDBACK_TABLE=${{ secrets.DDB_FEEDBACK_TABLE }}
+        DDB_ORDERS_TABLE=${{ secrets.DDB_ORDERS_TABLE }}
+        DDB_ANALYTICS_TABLE=${{ secrets.DDB_ANALYTICS_TABLE }}
+        DDB_ADMIN_KEYS_TABLE=${{ secrets.DDB_ADMIN_KEYS_TABLE }}
+        DDB_EXTERNAL_LOGS_TABLE=${{ secrets.DDB_EXTERNAL_LOGS_TABLE }}
+        
+        # React App Environment Variables
+        REACT_APP_AWS_REGION=${{ secrets.REACT_APP_AWS_REGION }}
+        REACT_APP_ENVIRONMENT=${{ secrets.REACT_APP_ENVIRONMENT }}
+        REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
+        
+        # Security & Authentication
+        ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}
+        JWT_SECRET=${{ secrets.JWT_SECRET }}
+        PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}
+        
+        # CORS Configuration
+        CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+        
+        # Logging Configuration
+        LOG_LEVEL=${{ secrets.LOG_LEVEL }}
+        LOG_FILE_PATH=${{ secrets.LOG_FILE_PATH }}
+        
+        # Performance & Monitoring
+        MAX_REQUEST_SIZE=${{ secrets.MAX_REQUEST_SIZE }}
+        REQUEST_TIMEOUT=${{ secrets.REQUEST_TIMEOUT }}
+        
+        # Frontend Configuration
+        FRONTEND_API_BASE_URL=${{ secrets.FRONTEND_API_BASE_URL }}
+        BACKEND_URL=${{ secrets.BACKEND_URL }}
+        
+        # EC2 Deployment Configuration
+        EC2_HOST=${{ secrets.EC2_HOST }}
+        EC2_USER=${{ secrets.EC2_USER }}
+        EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}
+        EOF
+        
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        chmod 600 ~/.ssh/app2-key-pair.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Deploy to EC2
+      run: |
+        # Create deployment package
+        tar -czf app2-deployment.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='.github' \
+          --exclude='*.log' \
+          .
+          
+        # Copy to EC2
+        scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/
+        
+        # Deploy on EC2
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /home/ec2-user
+          
+          # Stop existing container
+          docker stop app2-container 2>/dev/null || true
+          docker rm app2-container 2>/dev/null || true
+          
+          # Remove old app directory
+          rm -rf app2-old
+          mv app2 app2-old 2>/dev/null || true
+          
+          # Extract new deployment
+          tar -xzf app2-deployment.tar.gz
+          mv $(ls -1 | grep -v app2-old | grep -v app2-deployment.tar.gz | head -1) app2
+          
+          # Build and run new container
+          cd app2
+          docker build -t app2 .
+          docker run -d -p 3001:3001 --name app2-container app2
+          
+          # Cleanup
+          rm -f /home/ec2-user/app2-deployment.tar.gz
+          rm -rf /home/ec2-user/app2-old
+          
+          echo "Deployment completed successfully!"
+        EOF
+        
+    - name: Verify deployment
+      run: |
+        sleep 10
+        curl -f http://${{ secrets.EC2_HOST }}:3001/ || exit 1
+        echo "Application is running successfully!"
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f ~/.ssh/app2-key-pair.pem
+        rm -f app2-deployment.tar.gz
