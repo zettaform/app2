@@ -308,14 +308,6 @@ jobs:
           echo "🏁 SSH SCRIPT EXECUTION COMPLETED - $(date)"
         EOF
         
-        then
-          echo "✅ SSH deployment script completed successfully"
-        else
-          echo "❌ SSH deployment script failed!"
-          echo "SSH exit code: $?"
-          exit 1
-        fi
-        
     - name: Verify deployment
       run: |
         echo "Waiting for application to start..."
