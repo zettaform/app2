@@ -90,7 +90,7 @@ print_success "Files copied to EC2"
 print_status "Deploying application on EC2..."
 ssh -i "${SSH_KEY_PATH/#\~/$HOME}" \
     -o StrictHostKeyChecking=no \
-    $EC2_USER@$EC2_HOST << 'EOF'
+    $EC2_USER@$EC2_HOST << EOF
     set -e
     
     echo "📦 Extracting deployment package..."
@@ -102,9 +102,30 @@ ssh -i "${SSH_KEY_PATH/#\~/$HOME}" \
     sudo chown ec2-user:ec2-user /home/ec2-user/app
     cp -r dist/ server.js package.json package-lock.json ecosystem.config.js /home/ec2-user/app/
     
-    # Copy .env.production if it exists
+    # Create .env file from environment variables or .env.production
     if [ -f .env.production ]; then
         cp .env.production /home/ec2-user/app/.env
+    else
+        # Create .env from environment variables if available
+        cat > /home/ec2-user/app/.env << ENVEOF
+AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+NODE_ENV=production
+PORT=3001
+ENVIRONMENT=prod
+JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:5174,http://localhost:3000}
+DDB_USERS_TABLE=${DDB_USERS_TABLE:-production-Users}
+DDB_CUSTOMERS_TABLE=${DDB_CUSTOMERS_TABLE:-production-Customers}
+DDB_FEEDBACK_TABLE=${DDB_FEEDBACK_TABLE:-production-Feedback}
+DDB_ORDERS_TABLE=${DDB_ORDERS_TABLE:-production-Orders}
+DDB_ANALYTICS_TABLE=${DDB_ANALYTICS_TABLE:-production-Analytics}
+DDB_ADMIN_KEYS_TABLE=${DDB_ADMIN_KEYS_TABLE:-admin-keys-table-admin-keys}
+DDB_EXTERNAL_LOGS_TABLE=${DDB_EXTERNAL_LOGS_TABLE:-production-external-user-creation-logs}
+S3_AVATARS_BUCKET=${S3_AVATARS_BUCKET:-your-avatars-bucket-name}
+MAX_REQUEST_SIZE=${MAX_REQUEST_SIZE:-10mb}
+ENVEOF
     fi
     
     cd /home/ec2-user/app
