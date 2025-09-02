@@ -71,7 +71,9 @@ jobs:
         fi
         echo "✅ SSH connection successful"
         
+        echo "Executing SSH deployment script..."
         ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🚀 SSH SCRIPT EXECUTION STARTED - $(date)"
           cd /home/ec2-user
           echo "=== FRESH DEPLOYMENT - CLEARING EVERYTHING ==="
           
@@ -113,6 +115,7 @@ jobs:
           
           # Create .env file on EC2 with environment variables
           cd app2
+          echo "📝 Creating .env file with secrets..."
           cat > .env << 'ENVEOF'
           NODE_ENV=${{ secrets.NODE_ENV }}
           PORT=${{ secrets.PORT }}
@@ -172,6 +175,14 @@ jobs:
           EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}
           EC2_SSH_PRIVATE_KEY=${{ secrets.EC2_SSH_PRIVATE_KEY }}
           ENVEOF
+          
+          echo "✅ .env file created successfully"
+          echo "📋 Verifying .env file contents:"
+          ls -la .env
+          echo "First few lines of .env file:"
+          head -10 .env
+          echo "Environment variables count:"
+          wc -l .env
           
           # Build and run new container
           echo "🐳 Building fresh Docker image..."
@@ -233,8 +244,11 @@ jobs:
           rm -f /home/ec2-user/app2-deployment.tar.gz
           rm -rf /home/ec2-user/app2-old
           
-          echo "Deployment completed successfully!"
+          echo "🎉 Deployment completed successfully!"
+          echo "🏁 SSH SCRIPT EXECUTION COMPLETED - $(date)"
         EOF
+        
+        echo "✅ SSH deployment script execution finished"
         
     - name: Verify deployment
       run: |
