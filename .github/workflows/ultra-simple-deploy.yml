@@ -1,0 +1,122 @@
+name: Ultra Simple Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        chmod 600 ~/.ssh/app2-key-pair.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Ultra Simple Deploy
+      run: |
+        echo "🚀 Ultra simple deployment..."
+        
+        # Test SSH connection
+        ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"
+        
+        # Deploy ultra simple app
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🚀 ULTRA SIMPLE DEPLOYMENT"
+          echo "========================="
+          
+          cd /home/ec2-user
+          
+          # Kill any existing processes
+          pkill -f "node.*app.js" 2>/dev/null || true
+          pkill -f "node.*server.js" 2>/dev/null || true
+          
+          # Create ultra simple app
+          cat > app.js << 'APPEOF'
+const express = require('express');
+const app = express();
+const PORT = 3001;
+
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Hello from EC2!',
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    port: PORT
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', uptime: process.uptime() });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`App running on port ${PORT}`);
+});
+APPEOF
+          
+          # Create package.json
+          cat > package.json << 'PKGEOF'
+{
+  "name": "ultra-simple-app",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+PKGEOF
+          
+          # Install Node.js if not present
+          if ! command -v node &> /dev/null; then
+            echo "Installing Node.js..."
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs
+          fi
+          
+          # Install dependencies
+          echo "Installing dependencies..."
+          npm install
+          
+          # Start app in background
+          echo "Starting app..."
+          nohup node app.js > app.log 2>&1 &
+          echo $! > app.pid
+          
+          # Wait and check
+          sleep 5
+          ps aux | grep node
+          cat app.log
+          
+          echo "✅ Ultra simple deployment completed!"
+        EOF
+        
+    - name: Test Application
+      run: |
+        echo "🧪 Testing application..."
+        sleep 10
+        
+        for i in {1..3}; do
+          echo "Attempt $i/3: Testing connection to ${{ secrets.EC2_HOST }}:3001"
+          if curl -f --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}:3001/; then
+            echo "✅ Application is running successfully!"
+            curl http://${{ secrets.EC2_HOST }}:3001/health
+            exit 0
+          else
+            echo "❌ Connection failed, waiting 10 seconds before retry..."
+            sleep 10
+          fi
+        done
+        
+        echo "❌ Application verification failed"
+        exit 1
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f ~/.ssh/app2-key-pair.pem
