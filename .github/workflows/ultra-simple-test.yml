@@ -1,0 +1,96 @@
+name: Ultra Simple Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: Ultra Simple Test
+      run: |
+        echo "🧪 ULTRA SIMPLE TEST"
+        echo "===================="
+        echo ""
+        
+        # Test SSH connection
+        echo "Step 1: Testing SSH connection..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo '✅ SSH connection successful'"
+        echo ""
+        
+        # Run a series of simple commands
+        echo "Step 2: Running basic system checks..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🔍 System Information:'
+          echo '  - Hostname:' \$(hostname)
+          echo '  - User:' \$(whoami)
+          echo '  - Current directory:' \$(pwd)
+          echo '  - Disk space:' \$(df -h /)
+          echo '  - Memory:' \$(free -h)
+          echo ''
+          
+          echo '🔍 Node.js Status:'
+          if command -v node &> /dev/null; then
+            echo '  - Node.js version:' \$(node --version)
+            echo '  - npm version:' \$(npm --version)
+          else
+            echo '  - Node.js: NOT INSTALLED'
+          fi
+          echo ''
+          
+          echo '🔍 Network Status:'
+          echo '  - Listening ports:' \$(netstat -tlnp 2>/dev/null | grep LISTEN || echo 'No listening ports found')
+          echo ''
+          
+          echo '🔍 Process Status:'
+          echo '  - Node processes:' \$(ps aux | grep node | grep -v grep || echo 'No node processes running')
+          echo '  - PM2 processes:' \$(pm2 list 2>/dev/null || echo 'PM2 not available')
+          echo ''
+          
+          echo '🔍 File System:'
+          echo '  - Home directory contents:' \$(ls -la /home/ec2-user/)
+          echo '  - App directory:' \$(ls -la /home/ec2-user/app 2>/dev/null || echo 'App directory does not exist')
+          echo ''
+          
+          echo '🔍 Environment:'
+          echo '  - NODE_ENV:' \${NODE_ENV:-'NOT SET'}
+          echo '  - PORT:' \${PORT:-'NOT SET'}
+          echo '  - AWS_ACCESS_KEY_ID:' \${AWS_ACCESS_KEY_ID:+'SET'} \${AWS_ACCESS_KEY_ID:-'NOT SET'}
+          echo ''
+        "
+        
+        echo ""
+        echo "Step 3: Testing port accessibility..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🔍 Port 3001 status:'
+          if netstat -tlnp 2>/dev/null | grep ':3001' > /dev/null; then
+            echo '  - Port 3001 is listening'
+            netstat -tlnp 2>/dev/null | grep ':3001'
+          else
+            echo '  - Port 3001 is NOT listening'
+          fi
+          echo ''
+          
+          echo '🔍 Testing local connectivity:'
+          if curl -f http://localhost:3001/health 2>/dev/null; then
+            echo '  - Local health check: SUCCESS'
+          else
+            echo '  - Local health check: FAILED'
+          fi
+          echo ''
+        "
+        
+        echo ""
+        echo "🎯 Ultra simple test completed!"
+        echo ""
+        echo "This test provides detailed information about the EC2 instance"
+        echo "to help diagnose any deployment issues."
