@@ -37,21 +37,40 @@ jobs:
     - name: Deploy to EC2
       run: |
         # Create deployment package in a clean directory to avoid file conflicts
+        echo "Creating deployment package..."
         mkdir -p deployment-temp
+        echo "Copying files to deployment directory..."
         rsync -av --exclude='.git' --exclude='.github' --exclude='node_modules' --exclude='dist' --exclude='build' --exclude='*.log' --exclude='.env*' --exclude='app2-deployment.tar.gz' --exclude='deployment-temp' . deployment-temp/
         cd deployment-temp
         
-        # Create tar archive from clean directory
+        echo "Creating tar archive..."
         tar -czf ../app2-deployment.tar.gz .
         cd ..
         
+        echo "Checking deployment package size..."
+        ls -lh app2-deployment.tar.gz
+        
         # Clean up temp directory
         rm -rf deployment-temp
+        echo "✅ Deployment package created successfully"
           
         # Copy to EC2
-        scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/
+        echo "Copying deployment package to EC2..."
+        if ! scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/; then
+          echo "❌ Failed to copy deployment package to EC2!"
+          exit 1
+        fi
+        echo "✅ Deployment package copied successfully"
         
         # Deploy on EC2
+        echo "Starting SSH deployment to EC2..."
+        echo "Testing SSH connection..."
+        if ! ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"; then
+          echo "❌ SSH connection failed!"
+          exit 1
+        fi
+        echo "✅ SSH connection successful"
+        
         ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           cd /home/ec2-user
           echo "=== Starting deployment process ==="
