@@ -1,0 +1,84 @@
+name: Fix Security Groups - Open Ports
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix-security-groups:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Fix Security Groups
+      run: |
+        echo "🔧 FIXING SECURITY GROUPS - OPENING PORTS"
+        echo "========================================="
+        echo ""
+        
+        # Get the instance ID
+        echo "🔍 Finding EC2 instance..."
+        INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=ip-address,Values=52.70.4.30" \
+          --query 'Reservations[*].Instances[*].InstanceId' \
+          --output text)
+        
+        if [ -z "$INSTANCE_ID" ]; then
+          echo "❌ Could not find EC2 instance with IP 52.70.4.30"
+          exit 1
+        fi
+        
+        echo "✅ Found instance: $INSTANCE_ID"
+        
+        # Get security group ID
+        echo "🔍 Getting security group..."
+        SECURITY_GROUP_ID=$(aws ec2 describe-instances \
+          --instance-ids $INSTANCE_ID \
+          --query 'Reservations[*].Instances[*].SecurityGroups[*].GroupId' \
+          --output text)
+        
+        echo "✅ Found security group: $SECURITY_GROUP_ID"
+        
+        # Open port 3001
+        echo "🔓 Opening port 3001..."
+        aws ec2 authorize-security-group-ingress \
+          --group-id $SECURITY_GROUP_ID \
+          --protocol tcp \
+          --port 3001 \
+          --cidr 0.0.0.0/0 || echo "Port 3001 may already be open"
+        
+        # Open port 80
+        echo "🔓 Opening port 80..."
+        aws ec2 authorize-security-group-ingress \
+          --group-id $SECURITY_GROUP_ID \
+          --protocol tcp \
+          --port 80 \
+          --cidr 0.0.0.0/0 || echo "Port 80 may already be open"
+        
+        # Open port 8080
+        echo "🔓 Opening port 8080..."
+        aws ec2 authorize-security-group-ingress \
+          --group-id $SECURITY_GROUP_ID \
+          --protocol tcp \
+          --port 8080 \
+          --cidr 0.0.0.0/0 || echo "Port 8080 may already be open"
+        
+        echo ""
+        echo "✅ Security group rules updated!"
+        echo ""
+        echo "🔍 Current security group rules:"
+        aws ec2 describe-security-groups \
+          --group-ids $SECURITY_GROUP_ID \
+          --query 'SecurityGroups[*].IpPermissions[*].[IpProtocol,FromPort,ToPort,IpRanges[*].CidrIp]' \
+          --output table
+        
+        echo ""
+        echo "🎯 Security groups fixed! Ports 80, 8080, and 3001 should now be accessible."
