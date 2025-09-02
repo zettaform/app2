@@ -104,6 +104,7 @@ jobs:
           --exclude='node_modules' \
           --exclude='.github' \
           --exclude='*.log' \
+          --exclude='.env' \
           .
           
         # Copy to EC2
@@ -125,8 +126,69 @@ jobs:
           tar -xzf app2-deployment.tar.gz
           mv $(ls -1 | grep -v app2-old | grep -v app2-deployment.tar.gz | head -1) app2
           
-          # Build and run new container
+          # Create .env file on EC2 with environment variables
           cd app2
+          cat > .env << 'ENVEOF'
+          NODE_ENV=${{ secrets.NODE_ENV }}
+          PORT=${{ secrets.PORT }}
+          ENVIRONMENT=${{ secrets.ENVIRONMENT }}
+          
+          # AWS Configuration
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION=${{ secrets.AWS_REGION }}
+          
+          # DynamoDB Tables
+          ADMIN_KEYS_TABLE=${{ secrets.ADMIN_KEYS_TABLE }}
+          EXTERNAL_USER_LOGS_TABLE=${{ secrets.EXTERNAL_USER_LOGS_TABLE }}
+          DDB_USERS_TABLE=${{ secrets.DDB_USERS_TABLE }}
+          DDB_CUSTOMERS_TABLE=${{ secrets.DDB_CUSTOMERS_TABLE }}
+          DDB_FEEDBACK_TABLE=${{ secrets.DDB_FEEDBACK_TABLE }}
+          DDB_ORDERS_TABLE=${{ secrets.DDB_ORDERS_TABLE }}
+          DDB_ANALYTICS_TABLE=${{ secrets.DDB_ANALYTICS_TABLE }}
+          DDB_ADMIN_KEYS_TABLE=${{ secrets.DDB_ADMIN_KEYS_TABLE }}
+          DDB_EXTERNAL_LOGS_TABLE=${{ secrets.DDB_EXTERNAL_LOGS_TABLE }}
+          
+          # React App Environment Variables
+          REACT_APP_AWS_REGION=${{ secrets.REACT_APP_AWS_REGION }}
+          REACT_APP_ENVIRONMENT=${{ secrets.REACT_APP_ENVIRONMENT }}
+          REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
+          REACT_APP_BACKEND_URL=${{ secrets.REACT_APP_BACKEND_URL }}
+          REACT_APP_BUILD_ENV=${{ secrets.REACT_APP_BUILD_ENV }}
+          REACT_APP_AWS_ACCESS_KEY_ID=${{ secrets.REACT_APP_AWS_ACCESS_KEY_ID }}
+          REACT_APP_AWS_SECRET_ACCESS_KEY=${{ secrets.REACT_APP_AWS_SECRET_ACCESS_KEY }}
+          REACT_APP_ENABLE_LOGGING=${{ secrets.REACT_APP_ENABLE_LOGGING }}
+          REACT_APP_ENABLE_ANALYTICS=${{ secrets.REACT_APP_ENABLE_ANALYTICS }}
+          
+          # Security & Authentication
+          ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}
+          
+          # CORS Configuration
+          CORS_ORIGIN=${{ secrets.CORS_ORIGIN }}
+          
+          # Logging Configuration
+          LOG_LEVEL=${{ secrets.LOG_LEVEL }}
+          LOG_FILE_PATH=${{ secrets.LOG_FILE_PATH }}
+          
+          # Performance & Monitoring
+          MAX_REQUEST_SIZE=${{ secrets.MAX_REQUEST_SIZE }}
+          REQUEST_TIMEOUT=${{ secrets.REQUEST_TIMEOUT }}
+          
+          # Frontend Configuration
+          FRONTEND_API_BASE_URL=${{ secrets.FRONTEND_API_BASE_URL }}
+          BACKEND_URL=${{ secrets.BACKEND_URL }}
+          
+          # EC2 Deployment Configuration
+          EC2_HOST=${{ secrets.EC2_HOST }}
+          EC2_USER=${{ secrets.EC2_USER }}
+          EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}
+          EC2_SSH_PRIVATE_KEY=${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          ENVEOF
+          
+          # Build and run new container
           docker build -t app2 .
           docker run -d -p 3001:3001 --name app2-container app2
           
