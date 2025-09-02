@@ -115,11 +115,15 @@ jobs:
           
           # Extract new deployment
           echo "📦 Extracting fresh deployment..."
-          tar -xzf app2-deployment.tar.gz
-          echo "Extracted files:"
+          echo "Checking if deployment package exists:"
+          ls -la app2-deployment.tar.gz
+          echo "Extracting to app2 directory..."
+          mkdir -p app2
+          cd app2
+          tar -xzf ../app2-deployment.tar.gz
+          echo "Extracted files in app2 directory:"
           ls -la
-          echo "Moving extracted directory to app2..."
-          mv $(ls -1 | grep -v app2-deployment.tar.gz | head -1) app2
+          cd ..
           echo "✅ Fresh deployment extraction completed"
           
           # Create .env file on EC2 with environment variables
@@ -183,7 +187,7 @@ jobs:
           EC2_USER=${{ secrets.EC2_USER }}
           EC2_SSH_KEY_PATH=${{ secrets.EC2_SSH_KEY_PATH }}
           EC2_SSH_PRIVATE_KEY=${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          ENVEOF
+ENVEOF
           
           echo "✅ .env file created successfully"
           echo "📋 Verifying .env file contents:"
