@@ -3,10 +3,7 @@ node_modules/
 /.pnp
 .pnp.js
 
-# Testing
-/coverage
-
-# Production
+# Production builds
 /build
 /dist
 
@@ -16,32 +13,42 @@ node_modules/
 .env.development.local
 .env.test.local
 .env.production.local
-env.production.example
-env.development.example
+.env.*.local
 
-# AWS credentials (never commit)
+# AWS credentials and config (never commit)
 .aws/
 aws_env/
+*.pem
+*.key
+*.ppk
 
 # Deployment files
 deployment/
 deployment-*/
-*.pem
-*.key
-*.pem
-*.ppk
 
 # Logs
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-*.log
-logs/
 app.log
 app.pid
 
-# Misc
-.DS_Store
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+
+# Temporary folders
+tmp/
+temp/
+
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
@@ -50,34 +57,6 @@ app.pid
 # OS files
 .DS_Store
 Thumbs.db
-# Python backend
-backend/.venv/
-backend/venv/
-backend/__pycache__/
-backend/*.pyc
-backend/*.pyo
-backend/*.pyd
-backend/.Python
-backend/env/
-backend/pip-log.txt
-backend/pip-delete-this-directory.txt
 
-# Database files
-backend/data/*.csv
-
-# Logs
-*.log
-logs/
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-
-# Temporary folders
-tmp/
-temp/
+# Testing
+/coverage

@@ -1,9 +1,9 @@
 module.exports = {
   apps: [{
-    name: 'mosaic-react-backend',
+    name: 'app',
     script: 'server.js',
-    instances: 'max',
-    exec_mode: 'cluster',
+    instances: 1,
+    exec_mode: 'fork',
     watch: false,
     max_memory_restart: '1G',
     env: {
@@ -15,11 +15,6 @@ module.exports = {
       NODE_ENV: 'production',
       PORT: 3001,
       ENVIRONMENT: 'prod'
-    },
-    env_staging: {
-      NODE_ENV: 'staging',
-      PORT: 3001,
-      ENVIRONMENT: 'staging'
     },
     // Logging configuration
     log_file: './logs/combined.log',
@@ -33,9 +28,6 @@ module.exports = {
     // Restart policy
     min_uptime: '10s',
     max_restarts: 10,
-    
-    // Health check
-    health_check_grace_period: 3000,
     
     // Environment variables
     env_file: '.env'

@@ -1,0 +1,56 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build application
+        run: npm run build:prod
+        
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          SSH_KEY_PATH: ~/.ssh/deploy_key
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          S3_AVATARS_BUCKET: ${{ secrets.S3_AVATARS_BUCKET }}
+          CORS_ORIGIN: ${{ secrets.CORS_ORIGIN }}
+          DDB_USERS_TABLE: ${{ secrets.DDB_USERS_TABLE }}
+          DDB_CUSTOMERS_TABLE: ${{ secrets.DDB_CUSTOMERS_TABLE }}
+          DDB_FEEDBACK_TABLE: ${{ secrets.DDB_FEEDBACK_TABLE }}
+          DDB_ORDERS_TABLE: ${{ secrets.DDB_ORDERS_TABLE }}
+          DDB_ANALYTICS_TABLE: ${{ secrets.DDB_ANALYTICS_TABLE }}
+          DDB_ADMIN_KEYS_TABLE: ${{ secrets.DDB_ADMIN_KEYS_TABLE }}
+          DDB_EXTERNAL_LOGS_TABLE: ${{ secrets.DDB_EXTERNAL_LOGS_TABLE }}
+        run: ./deploy.sh
+        
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} 'pm2 status'
