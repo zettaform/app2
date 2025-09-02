@@ -10,10 +10,10 @@ function N8NAutomation() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   // Show loading state while auth is initializing
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>

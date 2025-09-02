@@ -12,7 +12,7 @@ function ExternalUserLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [filters, setFilters] = useState({
     admin_key: searchParams.get('admin_key') || '',
     admin_key_id: searchParams.get('admin_key_id') || '',
@@ -21,6 +21,20 @@ function ExternalUserLogs() {
     success: searchParams.get('success') || '',
     limit: parseInt(searchParams.get('limit')) || 100
   });
+
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // Check if user is admin after loading is complete
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
   const [pagination, setPagination] = useState({
     currentPage: 1,
     hasMore: false,

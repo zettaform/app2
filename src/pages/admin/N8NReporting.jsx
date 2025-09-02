@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 const N8NReporting = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [dateRange, setDateRange] = useState('7d');
+
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // Check if user is admin after loading is complete
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/signin" replace />;
+  }
 
   // Mock data for demonstration
   const [stats, setStats] = useState({
@@ -64,14 +78,14 @@ const N8NReporting = () => {
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-9xl mx-auto">
-      
+
       {/* Page Header */}
       <div className="sm:flex sm:justify-between sm:items-center mb-8">
         <div className="mb-4 sm:mb-0">
           <h1 className="text-2xl md:text-3xl text-slate-800 dark:text-slate-100 font-bold">N8N Reporting & Statistics</h1>
           <p className="text-slate-600 dark:text-slate-400">Monitor workflow performance and execution analytics</p>
         </div>
-        
+
         {/* Date Range Selector */}
         <div className="flex items-center space-x-3">
           <label className="text-sm text-slate-600 dark:text-slate-400">Time Range:</label>
@@ -181,21 +195,19 @@ const N8NReporting = () => {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab('overview')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'overview'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'overview'
                   ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+                }`}
             >
               Workflow Performance
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'history'
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'history'
                   ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                   : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:text-slate-400 dark:hover:text-slate-300'
-              }`}
+                }`}
             >
               Execution History
             </button>

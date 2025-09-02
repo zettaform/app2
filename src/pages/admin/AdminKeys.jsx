@@ -14,7 +14,7 @@ function AdminKeys() {
   const [editingKey, setEditingKey] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState('');
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   // Form state for creating/editing keys
@@ -26,7 +26,7 @@ function AdminKeys() {
   });
 
   // Show loading state while auth is initializing
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
