@@ -63,17 +63,20 @@ jobs:
     - name: Full Deploy
       if: github.event.inputs.deployment_type == 'full'
       run: |
-        # Create deployment package (exclude tar file itself to prevent conflicts)
-        tar -czf app2-deployment.tar.gz \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='.github' \
-          --exclude='*.log' \
-          --exclude='app2-deployment.tar.gz' \
-          --exclude='.env*' \
-          --exclude='dist' \
-          --exclude='build' \
-          .
+        # Create deployment package in a clean directory to avoid file conflicts
+        mkdir -p deployment-temp
+        cp -r . deployment-temp/
+        cd deployment-temp
+        
+        # Remove files that shouldn't be deployed
+        rm -rf .git .github node_modules dist build *.log .env* app2-deployment.tar.gz
+        
+        # Create tar archive from clean directory
+        tar -czf ../app2-deployment.tar.gz .
+        cd ..
+        
+        # Clean up temp directory
+        rm -rf deployment-temp
           
         # Copy to EC2
         scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/
