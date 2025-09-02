@@ -60,11 +60,17 @@ jobs:
           
         # Copy to EC2
         echo "Copying deployment package to EC2..."
+        echo "Local package details:"
+        ls -la app2-deployment.tar.gz
         if ! scp -i ~/.ssh/app2-key-pair.pem app2-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/; then
           echo "❌ Failed to copy deployment package to EC2!"
           exit 1
         fi
         echo "✅ Deployment package copied successfully"
+        
+        # Verify the file was copied
+        echo "Verifying file was copied to EC2..."
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "ls -la /home/ec2-user/app2-deployment.tar.gz"
         
         # Deploy on EC2
         echo "Starting SSH deployment to EC2..."
@@ -124,12 +130,17 @@ jobs:
           echo "📦 Extracting fresh deployment..."
           echo "Checking if deployment package exists:"
           ls -la app2-deployment.tar.gz
+          echo "Current directory contents before extraction:"
+          ls -la
           echo "Extracting to app2 directory..."
           mkdir -p app2
           cd app2
+          echo "Extracting from: $(pwd)/../app2-deployment.tar.gz"
           tar -xzf ../app2-deployment.tar.gz
           echo "Extracted files in app2 directory:"
           ls -la
+          echo "Checking for Dockerfile:"
+          ls -la Dockerfile
           cd ..
           echo "✅ Fresh deployment extraction completed"
           
