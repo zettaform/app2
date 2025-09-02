@@ -1,0 +1,92 @@
+name: Basic Command Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        chmod 600 ~/.ssh/app2-key-pair.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+    - name: Basic Command Test
+      run: |
+        echo "🔍 Running basic command test..."
+        
+        # Test 1: Basic SSH connection
+        echo "Test 1: Basic SSH connection"
+        ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"
+        
+        # Test 2: Simple command
+        echo "Test 2: Simple command"
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'Hello from EC2'"
+        
+        # Test 3: Check if we can create a file
+        echo "Test 3: File creation"
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'Test file content' > /home/ec2-user/test.txt && cat /home/ec2-user/test.txt && rm /home/ec2-user/test.txt"
+        
+        # Test 4: Check if we can run a simple Node.js command
+        echo "Test 4: Node.js check"
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "node --version || echo 'Node.js not installed'"
+        
+        # Test 5: Try to install Node.js
+        echo "Test 5: Node.js installation"
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash - && sudo yum install -y nodejs && node --version"
+        
+        # Test 6: Try to create a simple Express app
+        echo "Test 6: Simple Express app"
+        ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /home/ec2-user
+          cat > app.js << 'APPEOF'
+const express = require('express');
+const app = express();
+const PORT = 3001;
+
+app.get('/', (req, res) => {
+  res.json({ message: 'Hello from EC2!', timestamp: new Date().toISOString() });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`App running on port ${PORT}`);
+});
+APPEOF
+          
+          cat > package.json << 'PKGEOF'
+{
+  "name": "test-app",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+PKGEOF
+          
+          npm install
+          nohup node app.js > app.log 2>&1 &
+          echo $! > app.pid
+          sleep 5
+          ps aux | grep node
+          cat app.log
+        EOF
+        
+        # Test 7: Try to access the app
+        echo "Test 7: App access test"
+        sleep 10
+        curl -f --connect-timeout 10 --max-time 30 http://${{ secrets.EC2_HOST }}:3001/ || echo "App not accessible"
+        
+        echo "✅ All basic tests completed!"
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f ~/.ssh/app2-key-pair.pem
