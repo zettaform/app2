@@ -73,26 +73,43 @@ jobs:
         
         ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           cd /home/ec2-user
-          echo "=== Starting deployment process ==="
+          echo "=== FRESH DEPLOYMENT - CLEARING EVERYTHING ==="
           
-          # Stop existing container
-          echo "Stopping existing container..."
-          docker stop app2-container 2>/dev/null || echo "No existing container to stop"
-          docker rm app2-container 2>/dev/null || echo "No existing container to remove"
+          # Ensure Docker is running
+          echo "🐳 Checking Docker service..."
+          sudo systemctl start docker || echo "Docker service started"
+          sudo systemctl status docker || echo "Docker service status checked"
+          docker --version || echo "Docker version checked"
           
-          # Remove old app directory
-          echo "Backing up current deployment..."
-          rm -rf app2-old
-          mv app2 app2-old 2>/dev/null || echo "No existing deployment to backup"
+          # Complete cleanup - remove everything
+          echo "🧹 Cleaning up all existing deployments..."
+          docker stop $(docker ps -aq) 2>/dev/null || echo "No containers to stop"
+          docker rm $(docker ps -aq) 2>/dev/null || echo "No containers to remove"
+          docker rmi $(docker images -q) 2>/dev/null || echo "No images to remove"
+          docker system prune -af 2>/dev/null || echo "Docker system cleanup completed"
+          
+          # Remove all app directories
+          echo "🗑️ Removing all app directories..."
+          rm -rf app2* 2>/dev/null || echo "No app directories to remove"
+          rm -f app2-deployment.tar.gz 2>/dev/null || echo "No deployment package to remove"
+          
+          # Verify clean state
+          echo "✅ Clean state verified:"
+          echo "Docker containers:"
+          docker ps -a
+          echo "Docker images:"
+          docker images
+          echo "Directory contents:"
+          ls -la
           
           # Extract new deployment
-          echo "Extracting new deployment..."
+          echo "📦 Extracting fresh deployment..."
           tar -xzf app2-deployment.tar.gz
           echo "Extracted files:"
           ls -la
           echo "Moving extracted directory to app2..."
-          mv $(ls -1 | grep -v app2-old | grep -v app2-deployment.tar.gz | head -1) app2
-          echo "Deployment extraction completed"
+          mv $(ls -1 | grep -v app2-deployment.tar.gz | head -1) app2
+          echo "✅ Fresh deployment extraction completed"
           
           # Create .env file on EC2 with environment variables
           cd app2
@@ -157,19 +174,31 @@ jobs:
           ENVEOF
           
           # Build and run new container
-          echo "Building Docker image..."
+          echo "🐳 Building fresh Docker image..."
           echo "Current directory contents:"
           ls -la
-          echo "Starting Docker build..."
-          if ! docker build -t app2 .; then
-            echo "❌ Docker build failed!"
+          echo "Checking Dockerfile exists:"
+          ls -la Dockerfile
+          echo "Starting Docker build with verbose output..."
+          
+          # Build with verbose output and capture all logs
+          docker build -t app2 . --progress=plain --no-cache 2>&1 | tee docker-build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Docker build failed with exit code: $BUILD_EXIT_CODE"
             echo "Docker build logs:"
-            docker build -t app2 . 2>&1 || true
+            cat docker-build.log
+            echo "Checking Docker system info:"
+            docker system df
+            docker system info
             exit 1
           fi
           echo "✅ Docker build completed successfully"
+          echo "Docker images after build:"
+          docker images
           
-          echo "Starting Docker container..."
+          echo "🚀 Starting fresh Docker container..."
           if ! docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2; then
             echo "❌ Docker run failed!"
             echo "Checking for existing container..."
@@ -180,14 +209,25 @@ jobs:
             docker run -d -p 0.0.0.0:3001:3001 --name app2-container app2
           fi
           
-          echo "Waiting for container to start..."
-          sleep 5
+          echo "⏳ Waiting for container to start..."
+          sleep 10
           
-          echo "Checking container status..."
+          echo "📊 Checking container status..."
           docker ps -a
           
-          echo "Checking container logs..."
-          docker logs app2-container --tail 20
+          echo "📋 Checking container logs..."
+          docker logs app2-container --tail 50
+          
+          echo "🔍 Checking if container is actually running..."
+          if docker ps | grep -q app2-container; then
+            echo "✅ Container is running!"
+            echo "🌐 Testing internal container connectivity..."
+            docker exec app2-container curl -f http://localhost:3001/ || echo "❌ Internal connectivity test failed"
+          else
+            echo "❌ Container is not running!"
+            echo "Container status:"
+            docker ps -a | grep app2-container
+          fi
           
           # Cleanup
           rm -f /home/ec2-user/app2-deployment.tar.gz
