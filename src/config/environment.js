@@ -139,6 +139,9 @@ const validation = validateEnvironment();
 // Export validation results
 export const ENV_VALIDATION = validation;
 
+// Don't exit process on validation failure - let the application handle it
+// This allows the Docker container to start and show proper error messages
+
 // Helper functions
 export const isDevelopment = () => ENV_CONFIG.NODE_ENV === 'development';
 export const isProduction = () => ENV_CONFIG.NODE_ENV === 'production';

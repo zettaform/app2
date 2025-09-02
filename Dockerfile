@@ -42,5 +42,5 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node --version || exit 1
 
-# Start the enhanced production server
-CMD ["node", "enhanced-production-server.js"]
+# Start the server with centralized environment configuration
+CMD ["node", "server.js"]

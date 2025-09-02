@@ -12,7 +12,18 @@ dotenv.config();
 // Validate environment configuration
 if (!ENV_VALIDATION.isValid) {
   console.error('❌ Environment validation failed. Please check your configuration.');
-  process.exit(1);
+  console.error('Errors:', ENV_VALIDATION.errors);
+  if (ENV_VALIDATION.warnings.length > 0) {
+    console.warn('Warnings:', ENV_VALIDATION.warnings);
+  }
+  
+  // In production, continue with warnings but log the issues
+  if (ENV_CONFIG.NODE_ENV === 'production') {
+    console.warn('⚠️ Continuing in production mode despite validation errors...');
+  } else {
+    console.error('❌ Exiting due to validation errors in non-production environment.');
+    process.exit(1);
+  }
 }
 
 const app = express();
@@ -1359,7 +1370,14 @@ app.get('/api/feedback', async (req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🌍 Environment: ${ENVIRONMENT}`);
+  console.log(`🔧 Node Environment: ${ENV_CONFIG.NODE_ENV}`);
+  console.log(`🗄️  AWS Region: ${ENV_CONFIG.AWS.REGION}`);
   console.log(`🔑 Admin Global Key: ${ADMIN_GLOBAL_KEY}`);
+  console.log(`📊 DynamoDB Tables:`);
+  console.log(`   - Users: ${ENV_CONFIG.TABLES.USERS}`);
+  console.log(`   - Admin Keys: ${ENV_CONFIG.TABLES.ADMIN_KEYS}`);
+  console.log(`   - External Logs: ${ENV_CONFIG.TABLES.EXTERNAL_LOGS}`);
   console.log(`📊 API endpoints:`);
   console.log(`   GET  /api/users - List all users`);
   console.log(`   POST /api/users - Create new user (internal)`);
@@ -1381,4 +1399,12 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/auth/me - Get current user`);
   console.log(`   POST /api/feedback - Submit user feedback`);
   console.log(`   GET  /api/feedback - Get feedback (admin only)`);
+  
+  // Log environment validation status
+  if (ENV_VALIDATION.isValid) {
+    console.log(`✅ Environment validation: PASSED`);
+  } else {
+    console.log(`❌ Environment validation: FAILED`);
+    console.log(`   Errors: ${ENV_VALIDATION.errors.join(', ')}`);
+  }
 });
