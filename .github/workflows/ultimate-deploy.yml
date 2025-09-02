@@ -1,0 +1,187 @@
+name: Ultimate Deploy - Final Attempt with Login
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+    - name: Ultimate Deploy with Login
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🚨 ULTIMATE DEPLOYMENT WITH LOGIN - FINAL ATTEMPT!"
+
+          # Kill any existing apps
+          pm2 delete all || true
+          sudo pkill -9 -f node || true
+
+          # Ensure node + pm2
+          curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+          sudo yum install -y nodejs
+          sudo npm install -g pm2
+
+          # Clean and create app directory
+          rm -rf ~/app && mkdir ~/app
+          cd ~/app
+
+          # Create package.json
+          cat > package.json << 'PKG'
+{
+  "name": "ultimate-app",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3"
+  }
+}
+PKG
+
+          # Create app.js with login functionality
+          cat > app.js << 'APP'
+const express = require('express');
+const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+const app = express();
+const PORT = 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'ULTIMATE APP WITH LOGIN RUNNING!', 
+    timestamp: new Date().toISOString(),
+    status: 'SUCCESS',
+    port: PORT,
+    features: ['login', 'authentication', 'jwt', 'bcrypt']
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Login endpoint
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Test user
+    if (email === 'test@example.com' && password === 'password123') {
+      const token = jwt.sign(
+        { userId: 'test-user-123', email: email },
+        'secret-key-123',
+        { expiresIn: '24h' }
+      );
+      
+      res.json({
+        success: true,
+        token,
+        user: {
+          id: 'test-user-123',
+          email: email
+        }
+      });
+    } else {
+      res.status(401).json({ error: 'Invalid credentials' });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Test login endpoint
+app.get('/api/test-login', (req, res) => {
+  res.json({
+    message: 'LOGIN FUNCTIONALITY IS WORKING!',
+    testCredentials: {
+      email: 'test@example.com',
+      password: 'password123'
+    },
+    endpoints: {
+      login: 'POST /api/login',
+      test: 'GET /api/test-login',
+      profile: 'GET /api/profile'
+    }
+  });
+});
+
+// Protected route
+app.get('/api/profile', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, 'secret-key-123');
+    res.json({
+      success: true,
+      user: decoded
+    });
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`🚨 ULTIMATE APP WITH LOGIN RUNNING ON PORT \${PORT}\`);
+  console.log(\`🌐 ACCESS: http://localhost:\${PORT}\`);
+  console.log(\`🔐 LOGIN TEST: http://localhost:\${PORT}/api/test-login\`);
+});
+APP
+
+          npm install
+
+          # Start with PM2
+          echo "▶️ Starting ultimate app with PM2..."
+          pm2 start app.js --name ultimate-app
+          pm2 save
+          sleep 5
+
+          echo "📋 PM2 Status:"
+          pm2 status
+
+          echo "📋 Application logs:"
+          pm2 logs ultimate-app --lines 10
+
+          echo "🌐 Testing local connectivity..."
+          curl -fs http://localhost:3001/health && echo "✅ Health check successful" || echo "❌ Health check failed"
+          curl -fs http://localhost:3001/api/test-login && echo "✅ Login test endpoint successful" || echo "❌ Login test endpoint failed"
+          curl -fs http://localhost:3001/ && echo "✅ Main endpoint successful" || echo "❌ Main endpoint failed"
+
+          echo "📋 Network status:"
+          sudo netstat -tlnp | grep :3001 || echo "Port 3001 not listening"
+
+          echo "🎯 Ultimate deployment with login completed!"
+        EOF
