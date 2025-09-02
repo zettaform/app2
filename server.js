@@ -255,6 +255,28 @@ const validateAdminKey = async (req, res, next) => {
 
 // Routes
 
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'App2 API is running',
+    timestamp: new Date().toISOString(),
+    environment: ENVIRONMENT,
+    version: '1.0.0'
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: ENVIRONMENT,
+    uptime: process.uptime()
+  });
+});
+
 // List all users
 app.get('/api/users', async (req, res) => {
   try {
@@ -1368,8 +1390,8 @@ app.get('/api/feedback', async (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
   console.log(`🌍 Environment: ${ENVIRONMENT}`);
   console.log(`🔧 Node Environment: ${ENV_CONFIG.NODE_ENV}`);
   console.log(`🗄️  AWS Region: ${ENV_CONFIG.AWS.REGION}`);
