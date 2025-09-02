@@ -1,0 +1,92 @@
+name: Deploy to EC2 (Port 80 + 8080 fallback)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+    - name: Deploy App
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🚀 Starting deployment"
+
+          # Kill any existing apps
+          pm2 delete all || true
+          sudo pkill -9 -f node || true
+
+          # Ensure node + pm2
+          curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+          sudo yum install -y nodejs
+          sudo npm install -g pm2
+
+          # Clean old app
+          rm -rf ~/app && mkdir ~/app
+          cd ~/app
+
+          # Create package.json
+          cat > package.json << 'PKG'
+{
+  "name": "port-app",
+  "version": "1.0.0",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+PKG
+
+          # Create app.js (port 80 by default)
+          cat > app.js << 'APP'
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 80;
+
+app.get('/', (req, res) => {
+  res.json({ message: `App running on port ${PORT}`, time: new Date().toISOString() });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', uptime: process.uptime() });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚨 App running on port ${PORT}`);
+});
+APP
+
+          npm install
+
+          # Try starting on port 80 (with sudo)
+          echo "▶️ Trying to start on port 80..."
+          sudo PORT=80 pm2 start app.js --name app80 --update-env || true
+          sleep 5
+
+          if curl -fs http://localhost:80/health > /dev/null; then
+            echo "✅ Running on port 80"
+          else
+            echo "❌ Port 80 failed, trying 8080"
+            pm2 delete app80 || true
+            PORT=8080 pm2 start app.js --name app8080 --update-env
+            sleep 3
+            curl -fs http://localhost:8080/health || echo "❌ App not healthy on 8080 either"
+          fi
+
+          echo "📋 pm2 status:"
+          pm2 status
+          echo "📋 Network status:"
+          sudo netstat -tlnp | grep -E ':(80|8080)'
+        EOF
