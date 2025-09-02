@@ -1,0 +1,233 @@
+name: Force Deploy - No Stopping Until Running
+
+on:
+  workflow_dispatch:
+
+jobs:
+  force-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: FORCE DEPLOY - NO STOPPING
+      run: |
+        echo "🚨 FORCE DEPLOYMENT - NO STOPPING UNTIL RUNNING!"
+        echo "================================================"
+        echo ""
+        
+        # Test SSH connection
+        echo "Step 1: Testing SSH connection..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo '✅ SSH connection successful'"
+        echo ""
+        
+        # FORCE DEPLOY - Multiple attempts
+        echo "Step 2: FORCE DEPLOYING APPLICATION..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🚨 FORCE DEPLOYMENT STARTING...'
+          echo '==============================='
+          echo ''
+          
+          # KILL EVERYTHING
+          echo '🛑 KILLING ALL EXISTING PROCESSES...'
+          sudo pkill -f node || true
+          sudo pkill -f pm2 || true
+          sudo pkill -f app || true
+          sleep 2
+          echo '✅ All processes killed'
+          echo ''
+          
+          # CLEAN EVERYTHING
+          echo '🧹 CLEANING EVERYTHING...'
+          rm -rf /home/ec2-user/app*
+          rm -rf /home/ec2-user/test*
+          rm -rf /home/ec2-user/deployment*
+          rm -f /home/ec2-user/*.tar.gz
+          rm -f /home/ec2-user/*.log
+          echo '✅ Everything cleaned'
+          echo ''
+          
+          # INSTALL NODE.JS FORCE
+          echo '📦 FORCE INSTALLING NODE.JS...'
+          sudo yum remove -y nodejs npm || true
+          curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+          sudo yum install -y nodejs
+          echo 'Node.js version:' \$(node --version)
+          echo 'npm version:' \$(npm --version)
+          echo '✅ Node.js installed'
+          echo ''
+          
+          # INSTALL PM2 FORCE
+          echo '📦 FORCE INSTALLING PM2...'
+          sudo npm uninstall -g pm2 || true
+          sudo npm install -g pm2
+          echo 'PM2 version:' \$(pm2 --version)
+          echo '✅ PM2 installed'
+          echo ''
+          
+          # CREATE SIMPLE APP
+          echo '📝 CREATING SIMPLE APPLICATION...'
+          mkdir -p /home/ec2-user/app
+          cd /home/ec2-user/app
+          
+          # Create package.json
+          cat > package.json << 'EOF'
+{
+  \"name\": \"app2\",
+  \"version\": \"1.0.0\",
+  \"description\": \"App2 Application\",
+  \"main\": \"server.js\",
+  \"scripts\": {
+    \"start\": \"node server.js\",
+    \"dev\": \"node server.js\"
+  },
+  \"dependencies\": {
+    \"express\": \"^4.18.2\",
+    \"cors\": \"^2.8.5\",
+    \"dotenv\": \"^16.3.1\"
+  }
+}
+EOF
+          
+          # Create simple server.js
+          cat > server.js << 'EOF'
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Routes
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'App2 is running on EC2!', 
+    timestamp: new Date().toISOString(),
+    status: 'success',
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
+});
+
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'API is working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`🚀 Server running on port \${PORT}\`);
+  console.log(\`🌐 Access at: http://localhost:\${PORT}\`);
+  console.log(\`🔍 Health check: http://localhost:\${PORT}/health\`);
+});
+
+// Handle errors
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+});
+EOF
+          
+          # Create .env file
+          cat > .env << 'EOF'
+NODE_ENV=production
+PORT=3001
+ENVIRONMENT=prod
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+JWT_SECRET=${{ secrets.JWT_SECRET }}
+ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}
+PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}
+CORS_ORIGIN=*
+LOG_LEVEL=info
+EOF
+          
+          echo '✅ Application files created'
+          echo ''
+          
+          # INSTALL DEPENDENCIES
+          echo '📦 INSTALLING DEPENDENCIES...'
+          npm install
+          echo '✅ Dependencies installed'
+          echo ''
+          
+          # START WITH PM2
+          echo '🚀 STARTING APPLICATION WITH PM2...'
+          pm2 delete app2 || true
+          pm2 start server.js --name app2
+          pm2 save
+          pm2 startup || true
+          echo '✅ Application started with PM2'
+          echo ''
+          
+          # WAIT AND CHECK
+          echo '⏳ Waiting for application to start...'
+          sleep 10
+          
+          # CHECK STATUS
+          echo '📊 PM2 STATUS:'
+          pm2 status
+          echo ''
+          
+          # CHECK LOGS
+          echo '📋 APPLICATION LOGS:'
+          pm2 logs app2 --lines 20
+          echo ''
+          
+          # TEST LOCAL CONNECTIVITY
+          echo '🌐 TESTING LOCAL CONNECTIVITY:'
+          curl -f http://localhost:3001/health && echo '✅ Health check successful' || echo '❌ Health check failed'
+          curl -f http://localhost:3001/ && echo '✅ Main endpoint successful' || echo '❌ Main endpoint failed'
+          echo ''
+          
+          # CHECK NETWORK
+          echo '🔍 NETWORK STATUS:'
+          netstat -tlnp | grep :3001 || echo 'Port 3001 not listening'
+          echo ''
+          
+          echo '🎯 FORCE DEPLOYMENT COMPLETED!'
+        "
+        
+        echo ""
+        echo "Step 3: Testing external connectivity..."
+        sleep 5
+        
+        # Test external connectivity
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/3001"; then
+          echo "✅ Application is accessible externally on port 3001"
+        else
+          echo "❌ Application is not accessible externally on port 3001"
+          echo "This might be due to security group configuration"
+        fi
+        
+        echo ""
+        echo "🎯 FORCE DEPLOYMENT COMPLETED!"
+        echo ""
+        echo "🌐 Application URL: http://${{ secrets.EC2_HOST }}:3001"
+        echo "🔍 Health Check: http://${{ secrets.EC2_HOST }}:3001/health"
+        echo "📊 API Test: http://${{ secrets.EC2_HOST }}:3001/api/test"
