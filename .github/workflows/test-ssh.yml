@@ -1,0 +1,116 @@
+name: Test SSH Connection
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-ssh:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Test SSH Key Configuration
+      run: |
+        echo "🔍 Testing SSH Key Configuration..."
+        
+        # Create SSH directory
+        mkdir -p ~/.ssh
+        
+        # Check if secret exists
+        if [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "❌ CRITICAL: EC2_SSH_PRIVATE_KEY secret is not set!"
+          exit 1
+        fi
+        
+        # Write the key
+        echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        chmod 600 ~/.ssh/app2-key-pair.pem
+        
+        # Verify key file
+        echo "📋 Key file details:"
+        ls -la ~/.ssh/app2-key-pair.pem
+        echo ""
+        
+        # Check key format
+        echo "🔑 Key format validation:"
+        head -1 ~/.ssh/app2-key-pair.pem
+        tail -1 ~/.ssh/app2-key-pair.pem
+        echo ""
+        
+        # Check key content
+        echo "📄 Key content preview (first 5 lines):"
+        head -5 ~/.ssh/app2-key-pair.pem
+        echo ""
+        
+        # Validate PEM format
+        if grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/app2-key-pair.pem; then
+          echo "✅ Key appears to be in PEM format"
+        else
+          echo "❌ Key is NOT in proper PEM format!"
+          echo "Expected: -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----"
+        fi
+        
+        # Check line endings
+        if file ~/.ssh/app2-key-pair.pem | grep -q "CRLF"; then
+          echo "⚠️  WARNING: Key has Windows line endings (CRLF)"
+          echo "Converting to Unix line endings..."
+          dos2unix ~/.ssh/app2-key-pair.pem
+        else
+          echo "✅ Key has proper Unix line endings"
+        fi
+        
+        # Test SSH key format
+        echo "🔧 Testing SSH key format..."
+        if ssh-keygen -l -f ~/.ssh/app2-key-pair.pem 2>/dev/null; then
+          echo "✅ SSH key format is valid"
+        else
+          echo "❌ SSH key format is INVALID!"
+          echo "This will cause connection failures"
+        fi
+        
+    - name: Test SSH Connectivity
+      run: |
+        echo "🌐 Testing SSH connectivity..."
+        
+        # Check required secrets
+        if [ -z "${{ secrets.EC2_HOST }}" ]; then
+          echo "❌ EC2_HOST secret is not set!"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.EC2_USER }}" ]; then
+          echo "❌ EC2_USER secret is not set!"
+          exit 1
+        fi
+        
+        echo "📡 Testing connection to ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}"
+        
+        # Add host to known_hosts
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+        # Test basic connectivity
+        echo "🔌 Testing basic SSH connectivity..."
+        if ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"; then
+          echo "✅ SSH connection successful!"
+        else
+          echo "❌ SSH connection FAILED!"
+          echo "This indicates a problem with:"
+          echo "  - SSH key format/content"
+          echo "  - EC2 instance accessibility"
+          echo "  - Security group configuration"
+          echo "  - Key pair association"
+          exit 1
+        fi
+        
+        # Test file operations
+        echo "📁 Testing file operations..."
+        if ssh -i ~/.ssh/app2-key-pair.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "touch /tmp/test-file && rm /tmp/test-file && echo 'File operations successful'"; then
+          echo "✅ File operations successful!"
+        else
+          echo "❌ File operations FAILED!"
+          exit 1
+        fi
+        
+        echo "🎉 All SSH tests passed!"

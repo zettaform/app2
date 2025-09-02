@@ -29,10 +29,67 @@ jobs:
       
     - name: Setup SSH
       run: |
+        echo "🔑 Setting up SSH configuration..."
+        
+        # Create SSH directory
         mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Validate SSH key secret exists
+        if [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "❌ CRITICAL: EC2_SSH_PRIVATE_KEY secret is not set!"
+          echo "Please configure this secret in GitHub repository settings."
+          exit 1
+        fi
+        
+        # Write SSH key with proper formatting
+        echo "📝 Writing SSH private key..."
         echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/app2-key-pair.pem
+        
+        # Fix line endings (convert CRLF to LF if needed)
+        if file ~/.ssh/app2-key-pair.pem | grep -q "CRLF"; then
+          echo "⚠️  Converting Windows line endings to Unix..."
+          dos2unix ~/.ssh/app2-key-pair.pem 2>/dev/null || sed -i 's/\r$//' ~/.ssh/app2-key-pair.pem
+        fi
+        
+        # Set proper permissions
         chmod 600 ~/.ssh/app2-key-pair.pem
+        
+        # Validate key format
+        echo "🔍 Validating SSH key format..."
+        if ! grep -q "BEGIN.*PRIVATE KEY" ~/.ssh/app2-key-pair.pem; then
+          echo "❌ SSH key is not in proper PEM format!"
+          echo "Key should start with: -----BEGIN PRIVATE KEY----- or -----BEGIN RSA PRIVATE KEY-----"
+          echo "First line of key: $(head -1 ~/.ssh/app2-key-pair.pem)"
+          exit 1
+        fi
+        
+        # Test key format with ssh-keygen
+        if ! ssh-keygen -l -f ~/.ssh/app2-key-pair.pem >/dev/null 2>&1; then
+          echo "❌ SSH key format validation failed!"
+          echo "The key may be corrupted or in wrong format."
+          exit 1
+        fi
+        
+        echo "✅ SSH key format is valid"
+        
+        # Add host to known_hosts
+        echo "🌐 Adding EC2 host to known_hosts..."
         ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        
+        # Test basic connectivity
+        echo "🔌 Testing SSH connectivity..."
+        if ! ssh -i ~/.ssh/app2-key-pair.pem -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH test successful'" 2>/dev/null; then
+          echo "❌ SSH connectivity test failed!"
+          echo "Please verify:"
+          echo "  - EC2 instance is running"
+          echo "  - Security group allows SSH (port 22)"
+          echo "  - SSH key pair is correctly associated with EC2 instance"
+          echo "  - EC2_USER and EC2_HOST secrets are correct"
+          exit 1
+        fi
+        
+        echo "✅ SSH setup completed successfully"
         
     - name: Deploy to EC2
       run: |
