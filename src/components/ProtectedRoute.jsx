@@ -19,7 +19,7 @@ const ProtectedRoute = ({
   const location = useLocation();
   const currentPath = location.pathname;
 
-  // Show loading state
+  // Simple loading state
   if (loading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">

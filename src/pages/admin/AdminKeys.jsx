@@ -14,7 +14,7 @@ function AdminKeys() {
   const [editingKey, setEditingKey] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [error, setError] = useState('');
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   // Form state for creating/editing keys
@@ -25,7 +25,16 @@ function AdminKeys() {
     key_status: 'active'
   });
 
-  // Check if user is admin
+  // Show loading state while auth is initializing
+  if (loading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // Check if user is admin after loading is complete
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />;
   }

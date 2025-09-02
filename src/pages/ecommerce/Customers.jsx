@@ -40,9 +40,18 @@ function Users() {
     direction: 'asc'
   });
   
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
-  // Check if user is admin
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  // Check if user is admin after loading is complete
   if (!user || user.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
@@ -205,9 +214,11 @@ function Users() {
   };
 
   useEffect(() => {
-    refreshUsers();
+    if (user?.id) {
+      refreshUsers();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     // Debug modal state changes

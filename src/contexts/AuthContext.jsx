@@ -51,8 +51,17 @@ export const AuthProvider = ({ children }) => {
           if (currentUser) {
             setUser(currentUser);
           } else {
-            // Invalid token, clear auth
-            backendAuthService.signout();
+            // Try backup data for refresh scenarios only
+            try {
+              const backup = JSON.parse(sessionStorage.getItem('mosaic_user_backup') || 'null');
+              if (backup) {
+                setUser(backup);
+              } else {
+                backendAuthService.signout();
+              }
+            } catch (e) {
+              backendAuthService.signout();
+            }
           }
         }
       } catch (error) {
@@ -93,6 +102,8 @@ export const AuthProvider = ({ children }) => {
       const result = await backendAuthService.signin(email, password);
       if (result.success) {
         setUser(result.user);
+        // Simple backup for refresh scenarios
+        sessionStorage.setItem('mosaic_user_backup', JSON.stringify(result.user));
         return { success: true };
       }
       return { success: false, error: result.error || 'Login failed' };
@@ -104,6 +115,7 @@ export const AuthProvider = ({ children }) => {
 
   const signout = async () => {
     await backendAuthService.signout();
+    sessionStorage.removeItem('mosaic_user_backup');
     setUser(null);
     navigate('/signin');
   };
