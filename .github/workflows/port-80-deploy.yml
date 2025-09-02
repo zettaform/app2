@@ -1,0 +1,221 @@
+name: Port 80 Deploy - Try Different Port
+
+on:
+  workflow_dispatch:
+
+jobs:
+  port-80-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        
+    - name: PORT 80 DEPLOY - TRY DIFFERENT PORT
+      run: |
+        echo "🚨 PORT 80 DEPLOYMENT - TRYING DIFFERENT PORT!"
+        echo "=============================================="
+        echo ""
+        
+        # PORT 80 DEPLOY
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo '🚨 PORT 80 DEPLOYMENT STARTING...'
+          echo '================================='
+          echo ''
+          
+          # KILL EVERYTHING
+          echo '💥 KILLING ALL PROCESSES...'
+          sudo pkill -9 -f node || true
+          sudo pkill -9 -f pm2 || true
+          sudo pkill -9 -f app || true
+          sleep 2
+          echo '✅ All processes killed'
+          echo ''
+          
+          # CLEAN EVERYTHING
+          echo '🧹 CLEANING EVERYTHING...'
+          sudo rm -rf /home/ec2-user/app*
+          sudo rm -rf /home/ec2-user/test*
+          sudo rm -rf /home/ec2-user/emergency*
+          sudo rm -rf /home/ec2-user/nuclear*
+          sudo rm -f /home/ec2-user/*.log
+          echo '✅ Everything cleaned'
+          echo ''
+          
+          # INSTALL NODE.JS
+          echo '📦 INSTALLING NODE.JS...'
+          sudo yum remove -y nodejs npm || true
+          curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+          sudo yum install -y nodejs
+          echo 'Node.js:' \$(node --version)
+          echo '✅ Node.js installed'
+          echo ''
+          
+          # CREATE APP ON PORT 80
+          echo '📝 CREATING APP ON PORT 80...'
+          mkdir -p /home/ec2-user/port80-app
+          cd /home/ec2-user/port80-app
+          
+          # Package.json
+          cat > package.json << 'EOF'
+{
+  \"name\": \"port80-app\",
+  \"version\": \"1.0.0\",
+  \"main\": \"app.js\",
+  \"scripts\": {
+    \"start\": \"node app.js\"
+  },
+  \"dependencies\": {
+    \"express\": \"^4.18.2\"
+  }
+}
+EOF
+          
+          # App.js on port 80
+          cat > app.js << 'EOF'
+const express = require('express');
+const app = express();
+const PORT = 80;
+
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'APP RUNNING ON PORT 80!', 
+    timestamp: new Date().toISOString(),
+    status: 'SUCCESS',
+    port: PORT
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'HEALTHY', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`🚨 APP RUNNING ON PORT \${PORT}\`);
+  console.log(\`🌐 ACCESS: http://localhost:\${PORT}\`);
+});
+EOF
+          
+          echo '✅ App created for port 80'
+          echo ''
+          
+          # INSTALL DEPENDENCIES
+          echo '📦 INSTALLING DEPENDENCIES...'
+          npm install
+          echo '✅ Dependencies installed'
+          echo ''
+          
+          # START ON PORT 80
+          echo '🚨 STARTING ON PORT 80...'
+          sudo nohup node app.js > port80.log 2>&1 &
+          sleep 5
+          
+          # CHECK IF RUNNING
+          if pgrep -f 'node.*app.js' > /dev/null; then
+            echo '✅ APP IS RUNNING ON PORT 80!'
+            echo '📋 Process:' \$(pgrep -f 'node.*app.js')
+            echo '📋 Log:'
+            cat port80.log
+            echo ''
+            echo '🌐 Testing local access...'
+            curl -f http://localhost:80/health && echo '✅ HEALTH CHECK SUCCESS' || echo '❌ HEALTH CHECK FAILED'
+            curl -f http://localhost:80/ && echo '✅ MAIN ENDPOINT SUCCESS' || echo '❌ MAIN ENDPOINT FAILED'
+          else
+            echo '❌ APP FAILED TO START ON PORT 80'
+            echo '📋 Error log:'
+            cat port80.log
+          fi
+          
+          echo ''
+          echo '🔍 NETWORK STATUS:'
+          netstat -tlnp | grep :80 || echo 'Port 80 not listening'
+          echo ''
+          
+          # ALSO TRY PORT 8080
+          echo '📝 ALSO TRYING PORT 8080...'
+          cat > app8080.js << 'EOF'
+const express = require('express');
+const app = express();
+const PORT = 8080;
+
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'APP RUNNING ON PORT 8080!', 
+    timestamp: new Date().toISOString(),
+    status: 'SUCCESS',
+    port: PORT
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'HEALTHY', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`🚨 APP RUNNING ON PORT \${PORT}\`);
+  console.log(\`🌐 ACCESS: http://localhost:\${PORT}\`);
+});
+EOF
+          
+          nohup node app8080.js > port8080.log 2>&1 &
+          sleep 3
+          
+          if pgrep -f 'node.*app8080.js' > /dev/null; then
+            echo '✅ APP IS ALSO RUNNING ON PORT 8080!'
+            curl -f http://localhost:8080/health && echo '✅ PORT 8080 HEALTH CHECK SUCCESS' || echo '❌ PORT 8080 HEALTH CHECK FAILED'
+          else
+            echo '❌ APP FAILED TO START ON PORT 8080'
+          fi
+          
+          echo ''
+          echo '🔍 ALL NETWORK STATUS:'
+          netstat -tlnp | grep -E ':(80|8080|3001)' || echo 'No relevant ports listening'
+          echo ''
+          
+          echo '🎯 PORT 80/8080 DEPLOYMENT COMPLETED!'
+        "
+        
+        echo ""
+        echo "🚨 PORT 80/8080 DEPLOYMENT COMPLETED!"
+        echo ""
+        echo "🌐 App on Port 80: http://${{ secrets.EC2_HOST }}:80"
+        echo "🌐 App on Port 8080: http://${{ secrets.EC2_HOST }}:8080"
+        echo "🔍 Health Check Port 80: http://${{ secrets.EC2_HOST }}:80/health"
+        echo "🔍 Health Check Port 8080: http://${{ secrets.EC2_HOST }}:8080/health"
+        echo ""
+        echo "Testing external connectivity..."
+        sleep 5
+        
+        echo "Testing port 80..."
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/80"; then
+          echo "✅ APP IS ACCESSIBLE ON PORT 80!"
+        else
+          echo "❌ App not accessible on port 80"
+        fi
+        
+        echo "Testing port 8080..."
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/8080"; then
+          echo "✅ APP IS ACCESSIBLE ON PORT 8080!"
+        else
+          echo "❌ App not accessible on port 8080"
+        fi
+        
+        echo "Testing port 3001..."
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/3001"; then
+          echo "✅ APP IS ACCESSIBLE ON PORT 3001!"
+        else
+          echo "❌ App not accessible on port 3001"
+        fi
