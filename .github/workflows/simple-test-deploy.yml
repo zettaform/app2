@@ -1,0 +1,97 @@
+name: Simple Test Deploy - Just Get Something Running
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+    - name: Simple Test Deploy
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🧪 SIMPLE TEST DEPLOY - JUST GET SOMETHING RUNNING"
+
+          # Kill everything first
+          pm2 delete all || true
+          sudo pkill -9 -f node || true
+
+          # Install Node.js if needed
+          if ! command -v node &> /dev/null; then
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs
+          fi
+
+          # Create simple test app
+          mkdir -p ~/simple-test
+          cd ~/simple-test
+
+          cat > package.json << 'PKG'
+{
+  "name": "simple-test",
+  "version": "1.0.0",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
+PKG
+
+          cat > app.js << 'APP'
+const express = require('express');
+const app = express();
+const PORT = 3001;
+
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'SIMPLE TEST APP IS RUNNING!', 
+    timestamp: new Date().toISOString(),
+    port: PORT
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'healthy', port: PORT });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(\`Simple test app running on port \${PORT}\`);
+});
+APP
+
+          npm install
+
+          # Start with nohup (simplest way)
+          echo "Starting simple test app..."
+          nohup node app.js > app.log 2>&1 &
+          sleep 5
+
+          # Check if it's running
+          if pgrep -f 'node.*app.js' > /dev/null; then
+            echo "✅ Simple test app is running!"
+            echo "Process: $(pgrep -f 'node.*app.js')"
+            echo "Log:"
+            cat app.log
+            echo ""
+            echo "Testing local access..."
+            curl -f http://localhost:3001/health && echo "✅ Health check successful" || echo "❌ Health check failed"
+            curl -f http://localhost:3001/ && echo "✅ Main endpoint successful" || echo "❌ Main endpoint failed"
+          else
+            echo "❌ Simple test app failed to start"
+            echo "Error log:"
+            cat app.log
+          fi
+
+          echo ""
+          echo "Network status:"
+          netstat -tlnp | grep :3001 || echo "Port 3001 not listening"
+        EOF
