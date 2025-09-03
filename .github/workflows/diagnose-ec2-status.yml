@@ -1,0 +1,125 @@
+name: Diagnose EC2 Status - What's Actually Running
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+    - name: Diagnose EC2 Status
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          echo "🔍 DIAGNOSING EC2 STATUS - WHAT'S ACTUALLY RUNNING?"
+          echo "=================================================="
+          echo ""
+          
+          # System info
+          echo "🖥️ SYSTEM INFORMATION:"
+          echo "  - Hostname: $(hostname)"
+          echo "  - User: $(whoami)"
+          echo "  - Current directory: $(pwd)"
+          echo "  - Disk space: $(df -h / | tail -1)"
+          echo "  - Memory: $(free -h | grep Mem)"
+          echo ""
+          
+          # Node.js status
+          echo "📦 NODE.JS STATUS:"
+          if command -v node &> /dev/null; then
+            echo "  - Node.js version: $(node --version)"
+            echo "  - npm version: $(npm --version)"
+          else
+            echo "  - Node.js: NOT INSTALLED"
+          fi
+          echo ""
+          
+          # PM2 status
+          echo "📦 PM2 STATUS:"
+          if command -v pm2 &> /dev/null; then
+            echo "  - PM2 version: $(pm2 --version)"
+            echo "  - PM2 processes:"
+            pm2 list || echo "    No PM2 processes running"
+          else
+            echo "  - PM2: NOT INSTALLED"
+          fi
+          echo ""
+          
+          # All Node.js processes
+          echo "🔄 ALL NODE.JS PROCESSES:"
+          ps aux | grep node | grep -v grep || echo "  No Node.js processes running"
+          echo ""
+          
+          # Network status
+          echo "🌐 NETWORK STATUS:"
+          echo "  - All listening ports:"
+          netstat -tlnp 2>/dev/null | grep LISTEN || echo "    No ports listening"
+          echo ""
+          
+          # Check specific ports
+          echo "🔍 CHECKING SPECIFIC PORTS:"
+          for port in 22 80 3001 8080 443; do
+            if netstat -tlnp 2>/dev/null | grep ":$port " > /dev/null; then
+              echo "  - Port $port: LISTENING"
+              netstat -tlnp 2>/dev/null | grep ":$port "
+            else
+              echo "  - Port $port: NOT LISTENING"
+            fi
+          done
+          echo ""
+          
+          # Check application directories
+          echo "📁 APPLICATION DIRECTORIES:"
+          for dir in app test-app emergency-app nuclear-app port80-app final-app ultimate-app; do
+            if [ -d "/home/ec2-user/$dir" ]; then
+              echo "  - /home/ec2-user/$dir: EXISTS"
+              ls -la /home/ec2-user/$dir/ | head -5
+            else
+              echo "  - /home/ec2-user/$dir: NOT FOUND"
+            fi
+          done
+          echo ""
+          
+          # Check for any running applications
+          echo "🚀 CHECKING FOR RUNNING APPLICATIONS:"
+          for port in 3001 80 8080; do
+            echo "  Testing port $port locally..."
+            if curl -f http://localhost:$port/health 2>/dev/null; then
+              echo "    ✅ Port $port: Application responding"
+            elif curl -f http://localhost:$port/ 2>/dev/null; then
+              echo "    ✅ Port $port: Application responding (no /health endpoint)"
+            else
+              echo "    ❌ Port $port: No application responding"
+            fi
+          done
+          echo ""
+          
+          # Check recent logs
+          echo "📋 RECENT LOGS:"
+          if [ -f "/home/ec2-user/.pm2/logs/ultimate-app-out.log" ]; then
+            echo "  - Ultimate app logs:"
+            tail -10 /home/ec2-user/.pm2/logs/ultimate-app-out.log
+          fi
+          if [ -f "/home/ec2-user/.pm2/logs/final-app-out.log" ]; then
+            echo "  - Final app logs:"
+            tail -10 /home/ec2-user/.pm2/logs/final-app-out.log
+          fi
+          echo ""
+          
+          # Check environment
+          echo "🔧 ENVIRONMENT:"
+          echo "  - NODE_ENV: ${NODE_ENV:-'NOT SET'}"
+          echo "  - PORT: ${PORT:-'NOT SET'}"
+          echo "  - AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:+'SET'} ${AWS_ACCESS_KEY_ID:-'NOT SET'}"
+          echo ""
+          
+          echo "🎯 DIAGNOSIS COMPLETE!"
+        EOF
