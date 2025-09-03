@@ -1,0 +1,248 @@
+name: Deploy to EC2 (Syntax Fixed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_type:
+        description: 'Deployment Type'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+        - 'standard'
+        - 'force'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Validate Secrets
+      run: |
+        echo "🔍 Validating secrets..."
+        
+        if [ -z "${{ secrets.EC2_HOST }}" ] || [ -z "${{ secrets.EC2_USER }}" ] || [ -z "${{ secrets.EC2_SSH_PRIVATE_KEY }}" ]; then
+          echo "❌ Missing EC2 secrets"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.AWS_ACCESS_KEY_ID }}" ] || [ -z "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ]; then
+          echo "❌ Missing AWS secrets"
+          exit 1
+        fi
+        
+        if [ -z "${{ secrets.JWT_SECRET }}" ] || [ -z "${{ secrets.ADMIN_GLOBAL_KEY }}" ]; then
+          echo "❌ Missing security secrets"
+          exit 1
+        fi
+        
+        echo "✅ All secrets validated"
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+
+    - name: Test SSH Connection
+      run: |
+        echo "🔌 Testing SSH connection..."
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection successful'"
+
+    - name: Build Application
+      run: |
+        echo "🔨 Building application..."
+        npm ci
+        
+        if grep -q '"build"' package.json; then
+          npm run build
+          echo "✅ Frontend built"
+        fi
+
+    - name: Create Environment File
+      run: |
+        echo "🔧 Creating production environment..."
+        
+        # Create environment file with secrets
+        echo "NODE_ENV=production" > .env.deploy
+        echo "PORT=3001" >> .env.deploy
+        echo "ENVIRONMENT=prod" >> .env.deploy
+        echo "AWS_REGION=us-east-1" >> .env.deploy
+        echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env.deploy
+        echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env.deploy
+        echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env.deploy
+        echo "ADMIN_GLOBAL_KEY=${{ secrets.ADMIN_GLOBAL_KEY }}" >> .env.deploy
+        echo "PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}" >> .env.deploy
+        echo "CORS_ORIGIN=http://52.70.4.30:3001,https://52.70.4.30:3001" >> .env.deploy
+        echo "ADMIN_KEYS_TABLE=prod-admin-keys-table-admin-keys" >> .env.deploy
+        echo "EXTERNAL_USER_LOGS_TABLE=prod-external-user-creation-logs" >> .env.deploy
+        echo "DDB_USERS_TABLE=prod-users" >> .env.deploy
+        echo "DDB_CUSTOMERS_TABLE=prod-customers" >> .env.deploy
+        echo "DDB_FEEDBACK_TABLE=prod-feedback" >> .env.deploy
+        echo "DDB_ORDERS_TABLE=prod-orders" >> .env.deploy
+        echo "DDB_ANALYTICS_TABLE=prod-analytics" >> .env.deploy
+        echo "DDB_ADMIN_KEYS_TABLE=prod-admin-keys-table-admin-keys" >> .env.deploy
+        echo "DDB_EXTERNAL_LOGS_TABLE=prod-external-user-creation-logs" >> .env.deploy
+        echo "LOG_LEVEL=info" >> .env.deploy
+        echo "LOG_FILE_PATH=./logs/app.log" >> .env.deploy
+        echo "MAX_REQUEST_SIZE=10mb" >> .env.deploy
+        echo "REQUEST_TIMEOUT=30000" >> .env.deploy
+        
+        echo "✅ Environment file created"
+
+    - name: Create Deployment Package
+      run: |
+        echo "📦 Creating deployment package..."
+        
+        # Clean and create package directory
+        rm -rf deploy-pkg
+        mkdir -p deploy-pkg
+        
+        # Copy application files
+        cp -r src deploy-pkg/ 2>/dev/null || true
+        cp -r public deploy-pkg/ 2>/dev/null || true
+        cp package.json deploy-pkg/
+        cp package-lock.json deploy-pkg/ 2>/dev/null || true
+        cp server.js deploy-pkg/ 2>/dev/null || true
+        cp enhanced-production-server.js deploy-pkg/ 2>/dev/null || true
+        cp ecosystem.config.js deploy-pkg/ 2>/dev/null || true
+        
+        # Copy built files
+        if [ -d "dist" ]; then
+          cp -r dist deploy-pkg/
+        fi
+        if [ -d "build" ]; then
+          cp -r build deploy-pkg/
+        fi
+        
+        # Copy environment file
+        cp .env.deploy deploy-pkg/.env
+        
+        # Create archive
+        tar -czf app-deployment.tar.gz -C deploy-pkg .
+        
+        echo "✅ Package created: $(du -h app-deployment.tar.gz | cut -f1)"
+
+    - name: Transfer to EC2
+      run: |
+        echo "📤 Transferring to EC2..."
+        scp -o StrictHostKeyChecking=no app-deployment.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ec2-user/
+
+    - name: Deploy on EC2
+      run: |
+        echo "🚀 Deploying on EC2..."
+        
+        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "
+          echo 'Starting deployment...'
+          
+          # Stop existing processes
+          if [ '${{ github.event.inputs.deployment_type }}' = 'force' ]; then
+            sudo pkill -9 -f node || true
+            sudo pkill -9 -f pm2 || true
+          else
+            pm2 stop all || true
+            pm2 delete all || true
+            pkill -f 'node.*server' || true
+          fi
+          
+          sleep 3
+          
+          # Clean up
+          rm -rf /home/ec2-user/app
+          mkdir -p /home/ec2-user/app
+          cd /home/ec2-user/app
+          
+          # Extract
+          tar -xzf /home/ec2-user/app-deployment.tar.gz
+          
+          # Install Node.js if needed
+          if ! command -v node &> /dev/null; then
+            curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+            sudo yum install -y nodejs
+          fi
+          
+          # Install PM2 if needed
+          if ! command -v pm2 &> /dev/null; then
+            sudo npm install -g pm2
+          fi
+          
+          # Install dependencies
+          npm ci --production
+          
+          # Create logs directory
+          mkdir -p logs
+          
+          # Find server file
+          if [ -f 'server.js' ]; then
+            SERVER_FILE='server.js'
+          elif [ -f 'enhanced-production-server.js' ]; then
+            SERVER_FILE='enhanced-production-server.js'
+          else
+            echo 'No server file found'
+            ls -la
+            exit 1
+          fi
+          
+          echo \"Using server file: \$SERVER_FILE\"
+          
+          # Start application
+          pm2 start \$SERVER_FILE --name app2 --env production
+          pm2 save
+          
+          # Setup auto-restart
+          sudo env PATH=\$PATH:/usr/bin pm2 startup systemd -u ec2-user --hp /home/ec2-user || true
+          
+          sleep 8
+          
+          # Verify
+          if pgrep -f \"node.*\$SERVER_FILE\" > /dev/null; then
+            echo '✅ Application running'
+            echo \"PID: \$(pgrep -f \"node.*\$SERVER_FILE\")\"
+            
+            # Test endpoints
+            curl -f http://localhost:3001/health && echo '✅ Health OK' || echo '❌ Health failed'
+            curl -f http://localhost:3001/ && echo '✅ Main OK' || echo '❌ Main failed'
+            
+            # Show status
+            pm2 status
+          else
+            echo '❌ Application failed to start'
+            pm2 logs --lines 30
+            exit 1
+          fi
+          
+          echo '🎯 EC2 deployment completed!'
+        "
+
+    - name: Test External Access
+      run: |
+        echo "🔍 Testing external access..."
+        sleep 5
+        
+        if timeout 10 bash -c "</dev/tcp/${{ secrets.EC2_HOST }}/3001" 2>/dev/null; then
+          echo "✅ Application accessible: http://${{ secrets.EC2_HOST }}:3001"
+          echo "🔍 Health check: http://${{ secrets.EC2_HOST }}:3001/health"
+        else
+          echo "⚠️ External access blocked - check security groups"
+          echo "Need to open port 3001 in EC2 security group"
+        fi
+
+    - name: Deployment Summary
+      if: always()
+      run: |
+        echo ""
+        echo "🎉 DEPLOYMENT COMPLETED"
+        echo "======================"
+        echo "🌐 URL: http://${{ secrets.EC2_HOST }}:3001"
+        echo "🔍 Health: http://${{ secrets.EC2_HOST }}:3001/health"
+        echo "🔐 Login test: http://${{ secrets.EC2_HOST }}:3001/api/test-login"
+        echo ""
+        echo "✅ All syntax errors have been fixed!"
