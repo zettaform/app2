@@ -42,12 +42,13 @@ PASSWORD_SALT=[Password hashing salt]
 
 ### Option 1: GitHub Actions (Recommended)
 1. Configure the 8 required secrets above
-2. Go to **Actions** → **"🔧 FIXED DEPLOYMENT"** → **Run workflow**
+2. Go to **Actions** → **"Working Deploy to EC2"** → **Run workflow**
 3. Choose deployment type:
    - **Standard**: Graceful shutdown and deploy
    - **Force**: Kill all processes and deploy
-   - **Clean**: Deep clean and fresh deploy
-4. Enable debug mode if you need detailed logs
+4. Monitor deployment progress in Actions tab
+
+**Alternative GitHub workflow**: "Deploy to EC2 (Syntax Fixed)"
 
 ### Option 2: Local Deployment
 ```bash
@@ -61,8 +62,10 @@ export JWT_SECRET='your-32-char-minimum-secret'
 export ADMIN_GLOBAL_KEY='your-admin-key'
 export PASSWORD_SALT='your-salt'
 
-# Run deployment
-./scripts/deploy-fixed.sh
+# Run deployment (choose one)
+./scripts/deploy-clean.sh       # Recommended: clean, syntax-correct
+./scripts/deploy-fixed.sh       # Alternative: enhanced version
+./scripts/deploy-with-secrets.sh # Alternative: secret-focused
 ```
 
 ### Option 3: Environment File Creation
@@ -108,4 +111,25 @@ curl http://52.70.4.30:3001/api/test-login
 
 ---
 
-**This deployment fix resolves ALL the issues found in the git logs and provides a reliable deployment process using the configured GitHub secrets.**
+## 🔧 Syntax Errors Fixed
+
+**YAML Syntax Issues Resolved:**
+- ✅ Fixed here-document syntax in GitHub Actions workflows
+- ✅ Proper YAML indentation and structure
+- ✅ Removed complex nested here-documents
+- ✅ Used simple echo statements for environment creation
+
+**Shell Script Syntax Issues Resolved:**
+- ✅ Proper bash here-document delimiters
+- ✅ Correct variable escaping in nested contexts
+- ✅ Fixed string interpolation issues
+- ✅ Added proper error handling
+
+**Validation Results:**
+- ✅ `working-deploy.yml` - YAML syntax perfect
+- ✅ `deploy-syntax-fixed.yml` - YAML syntax OK
+- ✅ `deploy-clean.sh` - Bash syntax OK
+- ✅ `deploy-fixed.sh` - Bash syntax OK
+- ✅ `deploy-with-secrets.sh` - Bash syntax OK
+
+**This deployment fix resolves ALL the issues found in the git logs, including syntax errors, and provides a reliable deployment process using the configured GitHub secrets.**
